@@ -38,8 +38,8 @@ PLATFORMS = [
     ("tls-switch-linux-arm64", "manylinux_2_17_aarch64.manylinux2014_aarch64"),
     ("tls-switch-windows-amd64.exe", "win_amd64"),
     ("tls-switch-windows-arm64.exe", "win_arm64"),
-    ("tls-switch-freebsd-amd64", "freebsd_14_0_x86_64"),
-    ("tls-switch-freebsd-arm64", "freebsd_14_0_aarch64"),
+    ("tls-switch-freebsd-amd64", "freebsd_13_0_x86_64"),
+    ("tls-switch-freebsd-arm64", "freebsd_13_0_aarch64"),
     ("tls-switch-openbsd-amd64", "openbsd_7_0_x86_64"),
     ("tls-switch-openbsd-arm64", "openbsd_7_0_aarch64"),
 ]
@@ -123,13 +123,8 @@ def split_wheel(fat_wheel: Path, output_dir: Path) -> list[Path]:
             with zipfile.ZipFile(new_wheel_path, "w", zipfile.ZIP_DEFLATED) as new_zf:
                 records: list[str] = []
                 for fname, data in new_files.items():
-                    # Preserve original ZipInfo (permissions, timestamps)
                     info = file_info[fname]
-                    if fname == wheel_meta_name:
-                        # Write modified WHEEL metadata
-                        new_zf.writestr(info, data)
-                    else:
-                        new_zf.writestr(info, data)
+                    new_zf.writestr(info, data)
                     records.append(f"{fname},{_sha256_b64(data)},{len(data)}")
 
                 # Write RECORD as final entry

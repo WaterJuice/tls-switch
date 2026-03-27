@@ -1,7 +1,6 @@
 MODULE_NAME="tls_switch"
 
 # Go binary targets
-GO_SRC=go/main.go
 GO_BIN_DIR=tls_switch/bin
 
 # Default target: print usage message
@@ -14,7 +13,7 @@ help:
 	@echo "  make clean        - Clean built package and documentation"
 	@echo "  make check        - Format check and lint source (Python + Go)"
 	@echo "  make format       - Format source (Ruff for Python, gofmt for Go)"
-	@echo "  make lint         - Lint source using pyright"
+	@echo "  make lint         - Lint source using pyright and go vet"
 	@echo "  make dev          - Just create dev (.venv) setup"
 	@echo "  make publish      - Publish output/ to PyPI and docs"
 
@@ -99,6 +98,7 @@ format: check-dependencies
 .PHONY: lint
 lint: check-dependencies
 	uv run pyright
+	cd go && go vet ./...
 
 # Just create dev (.venv) setup
 .PHONY: dev

@@ -21,8 +21,8 @@ tls-switch is a WaterJuice project. The core engine is written in Go, with a Pyt
 | Linux arm64 | `tls-switch-linux-arm64` | `manylinux_2_17_aarch64` |
 | Windows amd64 | `tls-switch-windows-amd64.exe` | `win_amd64` |
 | Windows arm64 | `tls-switch-windows-arm64.exe` | `win_arm64` |
-| FreeBSD amd64 | `tls-switch-freebsd-amd64` | `freebsd_14_0_x86_64` |
-| FreeBSD arm64 | `tls-switch-freebsd-arm64` | `freebsd_14_0_aarch64` |
+| FreeBSD amd64 | `tls-switch-freebsd-amd64` | `freebsd_13_0_x86_64` |
+| FreeBSD arm64 | `tls-switch-freebsd-arm64` | `freebsd_13_0_aarch64` |
 | OpenBSD amd64 | `tls-switch-openbsd-amd64` | `openbsd_7_0_x86_64` |
 | OpenBSD arm64 | `tls-switch-openbsd-arm64` | `openbsd_7_0_aarch64` |
 
