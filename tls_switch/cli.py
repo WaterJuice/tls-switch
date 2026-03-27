@@ -2,7 +2,8 @@
 #   cli.py
 #   ------
 #
-#   CLI argument parsing and command handlers.
+#   CLI argument parsing and command handlers. Detects the current platform
+#   and executes the appropriate pre-built Go binary.
 #
 #   (c) 2026 WaterJuice — Released under the Unlicense; see LICENSE.
 #
@@ -15,8 +16,12 @@
 #   Imports
 # ----------------------------------------------------------------------------------------
 
+import os
+import platform
+import subprocess
 import sys
 import traceback
+from pathlib import Path
 from .argbuilder import ArgsParser
 from .argbuilder import Namespace
 from .version import VERSION_STR
@@ -24,6 +29,15 @@ from .version import VERSION_STR
 # ----------------------------------------------------------------------------------------
 #   Constants
 # ----------------------------------------------------------------------------------------
+
+_BIN_DIR = Path(__file__).parent / "bin"
+
+# Map (system, machine) to binary suffix
+_PLATFORM_MAP: dict[tuple[str, str], str] = {
+    ("Darwin", "arm64"): "darwin-arm64",
+    ("Linux", "aarch64"): "linux-arm64",
+    ("Linux", "x86_64"): "linux-amd64",
+}
 
 _LICENCE_TEXT = """\
 tls-switch — Released under the Unlicense (public domain)
@@ -37,6 +51,53 @@ means.
 
 For more information, please refer to <https://unlicense.org/>
 """
+
+# ----------------------------------------------------------------------------------------
+#   Binary Resolution
+# ----------------------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------------------
+def _get_binary_path() -> Path:
+    """Return the path to the Go binary for the current platform."""
+    key = (platform.system(), platform.machine())
+    suffix = _PLATFORM_MAP.get(key)
+    if suffix is None:
+        print(
+            f"Unsupported platform: {key[0]} {key[1]}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    binary = _BIN_DIR / f"tls-switch-{suffix}"
+    if not binary.exists():
+        print(
+            f"Binary not found: {binary}\n"
+            f"Run 'make go-build' to compile the Go binaries.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return binary
+
+
+# ----------------------------------------------------------------------------------------
+def _run_binary(args: list[str]) -> int:
+    """Execute the Go binary with the given arguments."""
+    binary = _get_binary_path()
+
+    # Ensure the binary is executable
+    if not os.access(binary, os.X_OK):
+        binary.chmod(binary.stat().st_mode | 0o755)
+
+    result = subprocess.run(
+        [str(binary)] + args,
+        stdin=sys.stdin,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
+    return result.returncode
+
 
 # ----------------------------------------------------------------------------------------
 #   Argument Parser
@@ -63,22 +124,10 @@ def _create_parser() -> ArgsParser:
     # hello --------------------------------------------------------------------
     parser.add_command(
         "hello",
-        help="Print a hello world message",
+        help="Print a hello world message (via Go binary)",
     )
 
     return parser
-
-
-# ----------------------------------------------------------------------------------------
-#   Subcommand Handlers
-# ----------------------------------------------------------------------------------------
-
-
-# ----------------------------------------------------------------------------------------
-def _cmd_hello(_args: Namespace) -> int:
-    """Print a hello world message."""
-    print("Hello, World!")
-    return 0
 
 
 # ----------------------------------------------------------------------------------------
@@ -121,7 +170,7 @@ def _main_inner() -> int:
     command = args.command if hasattr(args, "command") else None
 
     if command == "hello":
-        return _cmd_hello(args)
+        return _run_binary([])
 
     # Default: show help
     parser.parse(["--help"])

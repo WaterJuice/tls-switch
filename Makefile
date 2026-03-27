@@ -1,10 +1,16 @@
 MODULE_NAME="tls_switch"
 
+# Go binary targets
+GO_SRC=go/main.go
+GO_BIN_DIR=tls_switch/bin
+GO_TARGETS=$(GO_BIN_DIR)/tls-switch-darwin-arm64 $(GO_BIN_DIR)/tls-switch-linux-arm64 $(GO_BIN_DIR)/tls-switch-linux-amd64
+
 # Default target: print usage message
 .PHONY: help
 help:
 	@echo "Usage:"
 	@echo "  make build        - Build project and documentation"
+	@echo "  make go-build     - Cross-compile Go binaries"
 	@echo "  make docs         - Build HTML documentation"
 	@echo "  make clean        - Clean built package and documentation"
 	@echo "  make check        - Format check and lint source"
@@ -22,9 +28,16 @@ VERSION_STR=$(shell git describe --tags --always 2>/dev/null | sed 's/-/.post.de
 version:
 	@echo '__version__ = "$(VERSION_STR)"' > tls_switch/_version.py
 
+# Cross-compile Go binaries (static, fully self-contained)
+.PHONY: go-build
+go-build:
+	cd go && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-darwin-arm64 .
+	cd go && CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-linux-arm64  .
+	cd go && CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-linux-amd64  .
+
 # Build the project
 .PHONY: build
-build: check-dependencies format-check lint version docs
+build: check-dependencies format-check lint go-build version docs
 	rm -rf output/
 	uv build --out-dir output
 	rm -f output/*.tar.gz
@@ -53,6 +66,7 @@ docs: docs-help
 .PHONY: clean
 clean: check-dependencies
 	rm -rf html/ output/
+	rm -f $(GO_TARGETS)
 	uv clean
 
 # Check the format of code

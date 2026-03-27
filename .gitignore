@@ -41,6 +41,7 @@ htmlcov/
 
 # Generated
 tls_switch/_version.py
+tls_switch/bin/tls-switch-*
 
 # macOS
 .DS_Store

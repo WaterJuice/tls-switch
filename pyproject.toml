@@ -1,6 +1,6 @@
 [tool.hatch.build]
-# Include _version.py in builds even though it's gitignored (generated at build time)
-artifacts = ["tls_switch/_version.py"]
+# Include _version.py and pre-built Go binaries in builds even though they're gitignored
+artifacts = ["tls_switch/_version.py", "tls_switch/bin/tls-switch-*"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["tls_switch"]
