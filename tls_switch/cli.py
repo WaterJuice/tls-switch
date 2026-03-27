@@ -1,0 +1,128 @@
+# ----------------------------------------------------------------------------------------
+#   cli.py
+#   ------
+#
+#   CLI argument parsing and command handlers.
+#
+#   (c) 2026 WaterJuice — Released under the Unlicense; see LICENSE.
+#
+#   Version History
+#   ---------------
+#   Mar 2026 - Created
+# ----------------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------
+#   Imports
+# ----------------------------------------------------------------------------------------
+
+import sys
+import traceback
+from .argbuilder import ArgsParser
+from .argbuilder import Namespace
+from .version import VERSION_STR
+
+# ----------------------------------------------------------------------------------------
+#   Constants
+# ----------------------------------------------------------------------------------------
+
+_LICENCE_TEXT = """\
+tls-switch — Released under the Unlicense (public domain)
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+For more information, please refer to <https://unlicense.org/>
+"""
+
+# ----------------------------------------------------------------------------------------
+#   Argument Parser
+# ----------------------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------------------
+def _create_parser() -> ArgsParser:
+    """Build the argument parser with subcommands."""
+    parser = ArgsParser(
+        prog="tls-switch",
+        description="TLS switch utility.",
+        version=f"tls-switch {VERSION_STR}",
+    )
+
+    # Top-level options -------------------------------------------------------
+    parser.add_argument(
+        "--license",
+        action="store_true",
+        dest="license",
+        help="Show license information and exit",
+    )
+
+    # hello --------------------------------------------------------------------
+    parser.add_command(
+        "hello",
+        help="Print a hello world message",
+    )
+
+    return parser
+
+
+# ----------------------------------------------------------------------------------------
+#   Subcommand Handlers
+# ----------------------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------------------
+def _cmd_hello(_args: Namespace) -> int:
+    """Print a hello world message."""
+    print("Hello, World!")
+    return 0
+
+
+# ----------------------------------------------------------------------------------------
+#   Main Entry Point
+# ----------------------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------------------
+def main() -> int:
+    """Entry point: parse arguments and dispatch to subcommand."""
+    try:
+        return _main_inner()
+    except KeyboardInterrupt:
+        return 0
+    except SystemExit:
+        raise
+    except BaseException as e:
+        t = "-------------------------------------------------------------------\n"
+        t += "UNHANDLED EXCEPTION OCCURRED!!\n"
+        t += "\n"
+        t += traceback.format_exc()
+        t += "\n"
+        t += f"EXCEPTION: {type(e)} {e}\n"
+        t += "-------------------------------------------------------------------\n"
+        print(t, file=sys.stderr)
+        return 1
+
+
+# ----------------------------------------------------------------------------------------
+def _main_inner() -> int:
+    """Inner main function that does the actual work."""
+    # Handle --licence/--license before parsing (no command needed).
+    if "--license" in sys.argv:
+        print(_LICENCE_TEXT)
+        return 0
+
+    parser = _create_parser()
+    args: Namespace = parser.parse()
+
+    command = args.command if hasattr(args, "command") else None
+
+    if command == "hello":
+        return _cmd_hello(args)
+
+    # Default: show help
+    parser.parse(["--help"])
+    return 0
