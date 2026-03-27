@@ -20,7 +20,6 @@ import os
 import platform
 import subprocess
 import sys
-import traceback
 from pathlib import Path
 from .argbuilder import ArgsParser
 from .argbuilder import Namespace
@@ -76,16 +75,7 @@ def _get_binary_path() -> Path:
         )
         sys.exit(1)
 
-    binary = _BIN_DIR / binary_name
-    if not binary.exists():
-        print(
-            f"Binary not found: {binary}\n"
-            f"Run 'make go-build' to compile the Go binaries.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    return binary
+    return _BIN_DIR / binary_name
 
 
 # ----------------------------------------------------------------------------------------
@@ -95,14 +85,23 @@ def _run_binary(args: list[str]) -> int:
 
     # Ensure the binary is executable (may be needed after wheel install on Unix)
     if os.name != "nt" and not os.access(binary, os.X_OK):
-        binary.chmod(binary.stat().st_mode | 0o755)
+        binary.chmod(binary.stat().st_mode | 0o111)
 
-    result = subprocess.run(
-        [str(binary)] + args,
-        stdin=sys.stdin,
-        stdout=sys.stdout,
-        stderr=sys.stderr,
-    )
+    try:
+        result = subprocess.run(
+            [str(binary)] + args,
+            stdin=sys.stdin,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+    except FileNotFoundError:
+        print(
+            f"Binary not found: {binary}\n"
+            f"Run 'make go-build' to compile the Go binaries.",
+            file=sys.stderr,
+        )
+        return 1
+
     return result.returncode
 
 
@@ -152,6 +151,8 @@ def main() -> int:
     except SystemExit:
         raise
     except BaseException as e:
+        import traceback
+
         t = "-------------------------------------------------------------------\n"
         t += "UNHANDLED EXCEPTION OCCURRED!!\n"
         t += "\n"

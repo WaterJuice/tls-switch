@@ -26,19 +26,21 @@ version:
 	@echo '__version__ = "$(VERSION_STR)"' > tls_switch/_version.py
 
 # Cross-compile Go binaries (static, fully self-contained)
+# Runs all 10 builds in parallel using background jobs.
 .PHONY: go-build
 go-build:
 	@mkdir -p $(GO_BIN_DIR)
-	cd go && CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-darwin-arm64     .
-	cd go && CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-darwin-amd64     .
-	cd go && CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-linux-arm64      .
-	cd go && CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-linux-amd64      .
-	cd go && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-windows-amd64.exe .
-	cd go && CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-windows-arm64.exe .
-	cd go && CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-freebsd-amd64    .
-	cd go && CGO_ENABLED=0 GOOS=freebsd GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-freebsd-arm64    .
-	cd go && CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-openbsd-amd64    .
-	cd go && CGO_ENABLED=0 GOOS=openbsd GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-openbsd-arm64    .
+	cd go && CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-darwin-arm64      . &
+	cd go && CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-darwin-amd64      . &
+	cd go && CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-linux-arm64       . &
+	cd go && CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-linux-amd64       . &
+	cd go && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-windows-amd64.exe . &
+	cd go && CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-windows-arm64.exe . &
+	cd go && CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-freebsd-amd64     . &
+	cd go && CGO_ENABLED=0 GOOS=freebsd GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-freebsd-arm64     . &
+	cd go && CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-openbsd-amd64     . &
+	cd go && CGO_ENABLED=0 GOOS=openbsd GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-openbsd-arm64     . &
+	wait
 
 # Build the project (platform-specific wheels + docs)
 .PHONY: build

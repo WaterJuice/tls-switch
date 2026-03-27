@@ -151,12 +151,12 @@ def main() -> int:
     fat_wheel = Path(sys.argv[1])
     output_dir = Path(sys.argv[2])
 
-    if not fat_wheel.exists():
+    print(f"Splitting {fat_wheel.name} into platform wheels:")
+    try:
+        results = split_wheel(fat_wheel, output_dir)
+    except FileNotFoundError:
         print(f"Wheel not found: {fat_wheel}", file=sys.stderr)
         return 1
-
-    print(f"Splitting {fat_wheel.name} into platform wheels:")
-    results = split_wheel(fat_wheel, output_dir)
     print(f"\nBuilt {len(results)} platform wheels in {output_dir}/")
     return 0
 
