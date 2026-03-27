@@ -116,9 +116,7 @@ def split_wheel(fat_wheel: Path, output_dir: Path) -> list[Path]:
             )
             new_wheel_path = output_dir / new_wheel_name
 
-            with zipfile.ZipFile(
-                new_wheel_path, "w", zipfile.ZIP_DEFLATED
-            ) as new_zf:
+            with zipfile.ZipFile(new_wheel_path, "w", zipfile.ZIP_DEFLATED) as new_zf:
                 records: list[str] = []
                 for fname, data in new_files.items():
                     # Preserve original ZipInfo (permissions, timestamps)
