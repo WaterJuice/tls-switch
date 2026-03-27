@@ -40,6 +40,10 @@ _PLATFORM_MAP: dict[tuple[str, str], str] = {
     ("Linux", "x86_64"): "tls-switch-linux-amd64",
     ("Windows", "AMD64"): "tls-switch-windows-amd64.exe",
     ("Windows", "ARM64"): "tls-switch-windows-arm64.exe",
+    ("FreeBSD", "amd64"): "tls-switch-freebsd-amd64",
+    ("FreeBSD", "arm64"): "tls-switch-freebsd-arm64",
+    ("OpenBSD", "amd64"): "tls-switch-openbsd-amd64",
+    ("OpenBSD", "arm64"): "tls-switch-openbsd-arm64",
 }
 
 _LICENCE_TEXT = """\

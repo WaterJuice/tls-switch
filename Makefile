@@ -36,6 +36,10 @@ go-build:
 	cd go && CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-linux-amd64      .
 	cd go && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-windows-amd64.exe .
 	cd go && CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-windows-arm64.exe .
+	cd go && CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-freebsd-amd64    .
+	cd go && CGO_ENABLED=0 GOOS=freebsd GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-freebsd-arm64    .
+	cd go && CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-openbsd-amd64    .
+	cd go && CGO_ENABLED=0 GOOS=openbsd GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-openbsd-arm64    .
 
 # Build the project (platform-specific wheels + docs)
 .PHONY: build

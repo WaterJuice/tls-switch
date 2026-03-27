@@ -38,6 +38,10 @@ PLATFORMS = [
     ("tls-switch-linux-arm64", "manylinux_2_17_aarch64.manylinux2014_aarch64"),
     ("tls-switch-windows-amd64.exe", "win_amd64"),
     ("tls-switch-windows-arm64.exe", "win_arm64"),
+    ("tls-switch-freebsd-amd64", "freebsd_14_0_x86_64"),
+    ("tls-switch-freebsd-arm64", "freebsd_14_0_aarch64"),
+    ("tls-switch-openbsd-amd64", "openbsd_7_0_x86_64"),
+    ("tls-switch-openbsd-arm64", "openbsd_7_0_aarch64"),
 ]
 
 BIN_PREFIX = "tls_switch/bin/"

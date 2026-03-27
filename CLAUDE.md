@@ -6,7 +6,7 @@ tls-switch is a WaterJuice project. The core engine is written in Go, with a Pyt
 
 ## Architecture
 
-- **Go binary** (`go/main.go`) — the actual engine, cross-compiled for 6 platforms
+- **Go binary** (`go/main.go`) — the actual engine, cross-compiled for 10 platforms
 - **Python package** (`tls_switch/`) — CLI wrapper using argbuilder for argument parsing, detects platform and executes the correct Go binary
 - Pre-built Go binaries live in `tls_switch/bin/` (gitignored, included in wheel via hatch artifacts)
 - **Platform-specific wheels** — `scripts/build_wheels.py` splits a fat wheel into per-platform wheels, each containing only the relevant binary
@@ -21,11 +21,15 @@ tls-switch is a WaterJuice project. The core engine is written in Go, with a Pyt
 | Linux arm64 | `tls-switch-linux-arm64` | `manylinux_2_17_aarch64` |
 | Windows amd64 | `tls-switch-windows-amd64.exe` | `win_amd64` |
 | Windows arm64 | `tls-switch-windows-arm64.exe` | `win_arm64` |
+| FreeBSD amd64 | `tls-switch-freebsd-amd64` | `freebsd_14_0_x86_64` |
+| FreeBSD arm64 | `tls-switch-freebsd-arm64` | `freebsd_14_0_aarch64` |
+| OpenBSD amd64 | `tls-switch-openbsd-amd64` | `openbsd_7_0_x86_64` |
+| OpenBSD arm64 | `tls-switch-openbsd-arm64` | `openbsd_7_0_aarch64` |
 
 ## Build System
 
 - `make dev` — set up Python dev environment (.venv)
-- `make go-build` — cross-compile Go binaries for all 6 platforms (static, CGO_ENABLED=0)
+- `make go-build` — cross-compile Go binaries for all 10 platforms (static, CGO_ENABLED=0)
 - `make build` — full build (lint, go-build, version, docs, platform wheels)
 - `make check` — format check (ruff + gofmt) + pyright lint
 - `make format` — auto-format Python with ruff, Go with gofmt
