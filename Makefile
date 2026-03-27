@@ -3,19 +3,17 @@ MODULE_NAME="tls_switch"
 # Go binary targets
 GO_SRC=go/main.go
 GO_BIN_DIR=tls_switch/bin
-GO_TARGETS=$(GO_BIN_DIR)/tls-switch-darwin-arm64 $(GO_BIN_DIR)/tls-switch-linux-arm64 $(GO_BIN_DIR)/tls-switch-linux-amd64
 
 # Default target: print usage message
 .PHONY: help
 help:
 	@echo "Usage:"
-	@echo "  make build        - Build project and documentation"
-	@echo "  make go-build     - Cross-compile Go binaries"
+	@echo "  make build        - Build project, platform wheels, and documentation"
+	@echo "  make go-build     - Cross-compile Go binaries for all platforms"
 	@echo "  make docs         - Build HTML documentation"
 	@echo "  make clean        - Clean built package and documentation"
-	@echo "  make check        - Format check and lint source"
-	@echo "  make format       - Format source using Ruff"
-	@echo "  make black        - Format source using Black (for long strings)"
+	@echo "  make check        - Format check and lint source (Python + Go)"
+	@echo "  make format       - Format source (Ruff for Python, gofmt for Go)"
 	@echo "  make lint         - Lint source using pyright"
 	@echo "  make dev          - Just create dev (.venv) setup"
 	@echo "  make publish      - Publish output/ to PyPI and docs"
@@ -31,16 +29,22 @@ version:
 # Cross-compile Go binaries (static, fully self-contained)
 .PHONY: go-build
 go-build:
-	cd go && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-darwin-arm64 .
-	cd go && CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-linux-arm64  .
-	cd go && CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-linux-amd64  .
+	@mkdir -p $(GO_BIN_DIR)
+	cd go && CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-darwin-arm64     .
+	cd go && CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-darwin-amd64     .
+	cd go && CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-linux-arm64      .
+	cd go && CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-linux-amd64      .
+	cd go && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-windows-amd64.exe .
+	cd go && CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags='-s -w' -o ../$(GO_BIN_DIR)/tls-switch-windows-arm64.exe .
 
-# Build the project
+# Build the project (platform-specific wheels + docs)
 .PHONY: build
 build: check-dependencies format-check lint go-build version docs
 	rm -rf output/
-	uv build --out-dir output
-	rm -f output/*.tar.gz
+	mkdir -p output/
+	uv build --wheel --out-dir output/tmp
+	uv run python scripts/build_wheels.py output/tmp/*.whl output/
+	rm -rf output/tmp
 	cd html && uv run python -m zipfile -c ../output/tls-switch-$(VERSION_STR)-docs.zip .
 
 # Publish (requires output/ from make build)
@@ -66,10 +70,10 @@ docs: docs-help
 .PHONY: clean
 clean: check-dependencies
 	rm -rf html/ output/
-	rm -f $(GO_TARGETS)
+	rm -f $(GO_BIN_DIR)/tls-switch-*
 	uv clean
 
-# Check the format of code
+# Check the format of code (Python + Go)
 .PHONY: check
 check: format-check lint
 
@@ -78,19 +82,14 @@ check: format-check lint
 format-check: check-dependencies
 	uv run ruff format --check .
 	uv run ruff check .
+	gofmt -l go/ | grep . && echo "Go files need formatting (run make format)" && exit 1 || true
 
-# Fix format of the code
+# Fix format of the code (Python + Go)
 .PHONY: format
 format: check-dependencies
 	uv run ruff format .
 	uv run ruff check . --fix
-
-# Fix format of the code
-.PHONY: black
-black: check-dependencies
-	uv run black --preview --enable-unstable-feature string_processing .
-	uv run ruff format .
-	uv run ruff check . --fix
+	gofmt -w go/
 
 # Lint the code
 .PHONY: lint

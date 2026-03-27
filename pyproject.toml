@@ -4,6 +4,7 @@ artifacts = ["tls_switch/_version.py", "tls_switch/bin/tls-switch-*"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["tls_switch"]
+exclude = ["tls_switch/bin/.gitkeep"]
 
 [project]
 name = "tls-switch"
@@ -73,7 +74,6 @@ profile = "waterjuice"
 [dependency-groups]
 dev = [
     "ruff",
-    "black",
     "pyright[nodejs]",
     "cal-mkdocs",
     "cal-publish-python>=0.4.0",

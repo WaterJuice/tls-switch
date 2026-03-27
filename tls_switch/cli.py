@@ -32,11 +32,14 @@ from .version import VERSION_STR
 
 _BIN_DIR = Path(__file__).parent / "bin"
 
-# Map (system, machine) to binary suffix
+# Map (system, machine) to binary name
 _PLATFORM_MAP: dict[tuple[str, str], str] = {
-    ("Darwin", "arm64"): "darwin-arm64",
-    ("Linux", "aarch64"): "linux-arm64",
-    ("Linux", "x86_64"): "linux-amd64",
+    ("Darwin", "arm64"): "tls-switch-darwin-arm64",
+    ("Darwin", "x86_64"): "tls-switch-darwin-amd64",
+    ("Linux", "aarch64"): "tls-switch-linux-arm64",
+    ("Linux", "x86_64"): "tls-switch-linux-amd64",
+    ("Windows", "AMD64"): "tls-switch-windows-amd64.exe",
+    ("Windows", "ARM64"): "tls-switch-windows-arm64.exe",
 }
 
 _LICENCE_TEXT = """\
@@ -61,15 +64,15 @@ For more information, please refer to <https://unlicense.org/>
 def _get_binary_path() -> Path:
     """Return the path to the Go binary for the current platform."""
     key = (platform.system(), platform.machine())
-    suffix = _PLATFORM_MAP.get(key)
-    if suffix is None:
+    binary_name = _PLATFORM_MAP.get(key)
+    if binary_name is None:
         print(
             f"Unsupported platform: {key[0]} {key[1]}",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    binary = _BIN_DIR / f"tls-switch-{suffix}"
+    binary = _BIN_DIR / binary_name
     if not binary.exists():
         print(
             f"Binary not found: {binary}\n"
@@ -86,8 +89,8 @@ def _run_binary(args: list[str]) -> int:
     """Execute the Go binary with the given arguments."""
     binary = _get_binary_path()
 
-    # Ensure the binary is executable
-    if not os.access(binary, os.X_OK):
+    # Ensure the binary is executable (may be needed after wheel install on Unix)
+    if os.name != "nt" and not os.access(binary, os.X_OK):
         binary.chmod(binary.stat().st_mode | 0o755)
 
     result = subprocess.run(
