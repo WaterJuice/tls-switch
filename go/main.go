@@ -3,9 +3,8 @@
 //	main.go
 //	-------
 //
-//	Entry point for the tls-switch Go binary. Runs a JSON Lines protocol loop
-//	over stdin/stdout — reads requests, dispatches to handlers, writes responses.
-//	Also emits event lines for connection logging.
+//	Entry point for the tls-switch binary. Parses CLI flags, loads config,
+//	starts the server, watches for config changes, and handles shutdown.
 //
 //	(c) 2026 WaterJuice — Released under the Unlicense; see LICENSE.
 //
@@ -23,70 +22,56 @@ package main
 // ---------------------------------------------------------------------------------------
 
 import (
-	"bufio"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
-	"sync"
+	"syscall"
 	"time"
 )
 
 // ---------------------------------------------------------------------------------------
 //
-//	Types
+//	Constants
 //
 // ---------------------------------------------------------------------------------------
 
-// Request is a JSON Lines request from the Python wrapper.
-type Request struct {
-	Command string          `json:"command"`
-	Args    json.RawMessage `json:"args,omitempty"`
-}
+// Version is set at build time via -ldflags
+var Version = "dev"
 
-// Response is a JSON Lines response to the Python wrapper.
-type Response struct {
-	Status string `json:"status"`
-	Data   any    `json:"data,omitempty"`
-	Error  string `json:"error,omitempty"`
+const exampleConfig = `{
+  "listen": ":443",
+  "hosts": {
+    "app.example.com": {
+      "mode": "terminate",
+      "cert": "/etc/tls-switch/app.example.com.crt",
+      "key": "/etc/tls-switch/app.example.com.key",
+      "backend": "127.0.0.1:8080"
+    },
+    "legacy.example.com": {
+      "mode": "passthrough",
+      "backend": "10.0.0.5:443"
+    }
+  }
 }
+`
 
-// Event is an unsolicited JSON Lines message sent from Go to Python.
-type Event struct {
-	Event string `json:"event"`
-	Data  any    `json:"data,omitempty"`
-}
+const licenceText = `tls-switch — Released under the Unlicense (public domain)
 
-const (
-	statusOK    = "ok"
-	statusError = "error"
-)
+This is free and unencumbered software released into the public domain.
 
-// ---------------------------------------------------------------------------------------
-func okResponse(data any) Response {
-	return Response{Status: statusOK, Data: data}
-}
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
 
-// ---------------------------------------------------------------------------------------
-func errResponse(msg string) Response {
-	return Response{Status: statusError, Error: msg}
-}
+For more information, please refer to <https://unlicense.org/>
+`
 
-// ConfigureArgs is the args payload for the "configure" command.
-type ConfigureArgs struct {
-	ListenAddr string                   `json:"listen"`
-	Hosts      map[string]ConfigureHost `json:"hosts"`
-}
-
-// ConfigureHost is a single host entry in the configure args.
-type ConfigureHost struct {
-	Mode    string `json:"mode"`
-	Backend string `json:"backend"`
-	CertPEM string `json:"cert_pem,omitempty"`
-	KeyPEM  string `json:"key_pem,omitempty"`
-}
+const configPollInterval = 2 * time.Second
 
 // ---------------------------------------------------------------------------------------
 //
@@ -98,194 +83,310 @@ var ErrNotConfigured = errors.New("server is not configured")
 
 // ---------------------------------------------------------------------------------------
 //
-//	Global State
-//
-// ---------------------------------------------------------------------------------------
-
-var (
-	configStore = NewConfigStore()
-	server      *Server
-	outputMu    sync.Mutex
-	encoder     *json.Encoder
-)
-
-// ---------------------------------------------------------------------------------------
-// emitEvent sends an event line to stdout (thread-safe).
-func emitEvent(name string, data any) {
-	outputMu.Lock()
-	defer outputMu.Unlock()
-	encoder.Encode(Event{Event: name, Data: data})
-}
-
-// ---------------------------------------------------------------------------------------
-// sendResponse sends a response line to stdout (thread-safe).
-func sendResponse(resp Response) error {
-	outputMu.Lock()
-	defer outputMu.Unlock()
-	return encoder.Encode(resp)
-}
-
-// ---------------------------------------------------------------------------------------
-//
-//	Command Handlers
-//
-// ---------------------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------------------
-func handleConfigure(args json.RawMessage) Response {
-	var ca ConfigureArgs
-	if err := json.Unmarshal(args, &ca); err != nil {
-		return errResponse("invalid configure args: " + err.Error())
-	}
-
-	if ca.ListenAddr == "" {
-		return errResponse("listen address is required")
-	}
-
-	hosts := make(map[string]*HostRoute, len(ca.Hosts))
-	for hostname, h := range ca.Hosts {
-		route := &HostRoute{
-			Mode:    h.Mode,
-			Backend: h.Backend,
-		}
-
-		if h.Mode == ModeTerminate {
-			cert, err := tls.X509KeyPair([]byte(h.CertPEM), []byte(h.KeyPEM))
-			if err != nil {
-				return errResponse("failed to load cert/key for " + hostname + ": " + err.Error())
-			}
-			route.TLSConfig = &tls.Config{
-				Certificates: []tls.Certificate{cert},
-				MinVersion:   tls.VersionTLS12,
-			}
-		}
-
-		hosts[hostname] = route
-	}
-
-	configStore.Set(&Config{
-		ListenAddr: ca.ListenAddr,
-		Hosts:      hosts,
-	})
-
-	return okResponse(map[string]any{"hosts": len(hosts)})
-}
-
-// ---------------------------------------------------------------------------------------
-func handleStart(args json.RawMessage) Response {
-	if err := server.Start(); err != nil {
-		return errResponse("failed to start: " + err.Error())
-	}
-	cfg := configStore.Get()
-	addr := ""
-	if cfg != nil {
-		addr = cfg.ListenAddr
-	}
-	return okResponse(map[string]any{"listening": addr})
-}
-
-// ---------------------------------------------------------------------------------------
-func handleStop(args json.RawMessage) Response {
-	server.Stop()
-	return okResponse(nil)
-}
-
-// ---------------------------------------------------------------------------------------
-func handleStatus(args json.RawMessage) Response {
-	cfg := configStore.Get()
-	configured := cfg != nil
-	running := server.IsRunning()
-	activeConns := server.ActiveConnections()
-
-	listenAddr := ""
-	hostCount := 0
-	if cfg != nil {
-		listenAddr = cfg.ListenAddr
-		hostCount = len(cfg.Hosts)
-	}
-
-	return okResponse(map[string]any{
-		"configured":   configured,
-		"running":      running,
-		"listen":       listenAddr,
-		"hosts":        hostCount,
-		"active_conns": activeConns,
-	})
-}
-
-// ---------------------------------------------------------------------------------------
-func handleReload(args json.RawMessage) Response {
-	return handleConfigure(args)
-}
-
-// ---------------------------------------------------------------------------------------
-func handleVersion(args json.RawMessage) Response {
-	return okResponse(map[string]string{
-		"go":   strings.TrimPrefix(runtime.Version(), "go"),
-		"os":   runtime.GOOS,
-		"arch": runtime.GOARCH,
-	})
-}
-
-// ---------------------------------------------------------------------------------------
-//
-//	Command Dispatch
-//
-// ---------------------------------------------------------------------------------------
-
-var commands = map[string]func(json.RawMessage) Response{
-	"configure": handleConfigure,
-	"start":     handleStart,
-	"stop":      handleStop,
-	"status":    handleStatus,
-	"reload":    handleReload,
-	"version":   handleVersion,
-}
-
-// ---------------------------------------------------------------------------------------
-//
 //	Main
 //
 // ---------------------------------------------------------------------------------------
 
-const maxLineSize = 1024 * 1024 // 1MB max request size
-
 // ---------------------------------------------------------------------------------------
 func main() {
-	encoder = json.NewEncoder(os.Stdout)
-	server = NewServer(configStore, emitEvent)
+	if len(os.Args) < 2 {
+		printUsage()
+		os.Exit(0)
+	}
 
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Buffer(make([]byte, maxLineSize), maxLineSize)
-
-	for scanner.Scan() {
-		line := scanner.Bytes()
-
-		var req Request
-		if err := json.Unmarshal(line, &req); err != nil {
-			if err := sendResponse(errResponse("invalid request: expected JSON object")); err != nil {
-				return
-			}
-			continue
+	switch os.Args[1] {
+	case "--help", "-h":
+		printUsage()
+	case "--version":
+		fmt.Printf("tls-switch: %s\n", Version)
+		fmt.Printf("go: %s\n", strings.TrimPrefix(runtime.Version(), "go"))
+	case "--license":
+		fmt.Print(licenceText)
+	case "--example-config":
+		fmt.Print(exampleConfig)
+	case "-c", "--config":
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "Error: --config/-c requires a file path")
+			os.Exit(1)
 		}
+		runServer(os.Args[2])
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown option: %s\n", os.Args[1])
+		fmt.Fprintln(os.Stderr, "Run with --help for usage")
+		os.Exit(1)
+	}
+}
 
-		handler, ok := commands[req.Command]
-		if !ok {
-			if err := sendResponse(errResponse("unknown command: " + req.Command)); err != nil {
-				return
-			}
-			continue
-		}
+// ---------------------------------------------------------------------------------------
+func printUsage() {
+	fmt.Println("usage: tls-switch [--help] [--version] [--license] [--config FILE]")
+	fmt.Println("                  [--example-config]")
+	fmt.Println()
+	fmt.Println("SNI-based TLS reverse proxy.")
+	fmt.Println()
+	fmt.Println("options:")
+	fmt.Println("  -h, --help        show this help message and exit")
+	fmt.Println("  --version         show version and exit")
+	fmt.Println("  --license         show license information and exit")
+	fmt.Println("  --config, -c FILE path to the JSON config file")
+	fmt.Println("  --example-config  print an example config file and exit")
+}
 
-		resp := handler(req.Args)
-		if err := sendResponse(resp); err != nil {
+// ---------------------------------------------------------------------------------------
+func runServer(configPath string) {
+	isTTY := isTerminal()
+
+	logInfo(isTTY, "tls-switch %s (go %s)", Version, strings.TrimPrefix(runtime.Version(), "go"))
+
+	configStore := NewConfigStore()
+	server := NewServer(configStore, func(name string, data any) {
+		logEvent(isTTY, name, data)
+	})
+
+	// Load initial config
+	cfg, err := loadAndApplyConfig(configPath, configStore, isTTY)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Config error: %s\n", err)
+		os.Exit(1)
+	}
+
+	logInfo(isTTY, "Listening on %s", cfg.ListenAddr)
+
+	if err := server.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to start: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Handle signals
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start config file watcher
+	stopWatch := make(chan struct{})
+	go watchConfig(configPath, configStore, isTTY, stopWatch)
+
+	logInfo(isTTY, "Ready (Ctrl+C to stop)")
+
+	// Wait for first signal
+	<-sigCh
+	logInfo(isTTY, "Shutting down (Ctrl+C again to force)...")
+
+	// Second signal force-kills
+	go func() {
+		<-sigCh
+		os.Exit(1)
+	}()
+
+	close(stopWatch)
+	server.Stop()
+	logInfo(isTTY, "Stopped")
+}
+
+// ---------------------------------------------------------------------------------------
+//
+//	Config Loading
+//
+// ---------------------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------------------
+func loadAndApplyConfig(path string, cs *ConfigStore, isTTY bool) (*Config, error) {
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		return nil, err
+	}
+	cs.Set(cfg)
+
+	logInfo(isTTY, "Configured %d host(s):", len(cfg.Hosts))
+	for hostname, route := range cfg.Hosts {
+		logInfo(isTTY, "  %s (%s) → %s",
+			colorCyan(hostname, isTTY),
+			route.Mode,
+			colorGreen(route.Backend, isTTY))
+	}
+
+	return cfg, nil
+}
+
+// ---------------------------------------------------------------------------------------
+//
+//	Config File Watching
+//
+// ---------------------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------------------
+func watchConfig(path string, cs *ConfigStore, isTTY bool, stop chan struct{}) {
+	mtimes := getFileMtimes(path)
+
+	for {
+		select {
+		case <-stop:
 			return
+		case <-time.After(configPollInterval):
+		}
+
+		newMtimes := getFileMtimes(path)
+		if mtimesEqual(mtimes, newMtimes) {
+			continue
+		}
+		mtimes = newMtimes
+
+		logInfo(isTTY, "Config change detected, reloading...")
+
+		_, err := loadAndApplyConfig(path, cs, isTTY)
+		if err != nil {
+			logInfo(isTTY, "Reload failed (keeping current config): %s", err)
 		}
 	}
 }
 
 // ---------------------------------------------------------------------------------------
-// formatTimestamp returns an ISO 8601 timestamp string.
-func formatTimestamp() string {
-	return time.Now().UTC().Format(time.RFC3339)
+func getFileMtimes(configPath string) map[string]time.Time {
+	mtimes := make(map[string]time.Time)
+
+	info, err := os.Stat(configPath)
+	if err != nil {
+		return mtimes
+	}
+	mtimes[configPath] = info.ModTime()
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return mtimes
+	}
+
+	var raw struct {
+		Hosts map[string]struct {
+			Cert string `json:"cert"`
+			Key  string `json:"key"`
+		} `json:"hosts"`
+	}
+	if json.Unmarshal(data, &raw) != nil {
+		return mtimes
+	}
+
+	for _, h := range raw.Hosts {
+		for _, f := range []string{h.Cert, h.Key} {
+			if f == "" {
+				continue
+			}
+			if info, err := os.Stat(f); err == nil {
+				mtimes[f] = info.ModTime()
+			}
+		}
+	}
+
+	return mtimes
+}
+
+// ---------------------------------------------------------------------------------------
+func mtimesEqual(a, b map[string]time.Time) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if bv, ok := b[k]; !ok || !v.Equal(bv) {
+			return false
+		}
+	}
+	return true
+}
+
+// ---------------------------------------------------------------------------------------
+//
+//	Logging
+//
+// ---------------------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------------------
+func logInfo(isTTY bool, format string, args ...any) {
+	ts := time.Now().Format("2006-01-02 15:04:05 -0700")
+	msg := fmt.Sprintf(format, args...)
+	if isTTY {
+		fmt.Fprintf(os.Stderr, "\033[2m%s\033[0m %s\n", ts, msg)
+	} else {
+		fmt.Fprintf(os.Stderr, "%s %s\n", ts, msg)
+	}
+}
+
+// ---------------------------------------------------------------------------------------
+func logEvent(isTTY bool, event string, data any) {
+	if event != "connection" {
+		return
+	}
+	m, ok := data.(map[string]string)
+	if !ok {
+		return
+	}
+
+	source := m["source"]
+	hostname := m["hostname"]
+	mode := m["mode"]
+	backend := m["backend"]
+	action := m["action"]
+	reason := m["reason"]
+	errMsg := m["error"]
+
+	if errMsg != "" {
+		logInfo(isTTY, "%s %s", colorDim(source, isTTY), colorRed(errMsg, isTTY))
+	} else if action == "rejected" {
+		logInfo(isTTY, "%s → %s %s",
+			colorDim(source, isTTY),
+			colorYellow(hostname, isTTY),
+			colorRed(reason, isTTY))
+	} else {
+		logInfo(isTTY, "%s → %s %s → %s",
+			colorDim(source, isTTY),
+			colorCyan(hostname, isTTY),
+			colorDim("("+mode+")", isTTY),
+			colorGreen(backend, isTTY))
+	}
+}
+
+// ---------------------------------------------------------------------------------------
+func isTerminal() bool {
+	info, err := os.Stderr.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
+// ---------------------------------------------------------------------------------------
+func colorDim(s string, tty bool) string {
+	if !tty {
+		return s
+	}
+	return "\033[2m" + s + "\033[0m"
+}
+
+// ---------------------------------------------------------------------------------------
+func colorCyan(s string, tty bool) string {
+	if !tty {
+		return s
+	}
+	return "\033[36m" + s + "\033[0m"
+}
+
+// ---------------------------------------------------------------------------------------
+func colorGreen(s string, tty bool) string {
+	if !tty {
+		return s
+	}
+	return "\033[32m" + s + "\033[0m"
+}
+
+// ---------------------------------------------------------------------------------------
+func colorYellow(s string, tty bool) string {
+	if !tty {
+		return s
+	}
+	return "\033[33m" + s + "\033[0m"
+}
+
+// ---------------------------------------------------------------------------------------
+func colorRed(s string, tty bool) string {
+	if !tty {
+		return s
+	}
+	return "\033[31m" + s + "\033[0m"
 }

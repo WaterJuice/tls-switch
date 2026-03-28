@@ -2,17 +2,10 @@
 #   tls-switch
 #   ----------
 #
-#   TLS switch utility.
+#   SNI-based TLS reverse proxy. This Python package is a thin launcher for
+#   the Go binary which handles all logic.
 #
 #   (c) 2026 WaterJuice — Released under the Unlicense; see LICENSE.
-#
-#   Version History
-#   ---------------
-#   Mar 2026 - Created
-# ----------------------------------------------------------------------------------------
-
-# ----------------------------------------------------------------------------------------
-#   Version
 # ----------------------------------------------------------------------------------------
 
 from .version import VERSION_STR

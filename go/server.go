@@ -178,7 +178,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	hostname, buffered, err := ExtractSNI(conn)
 	if err != nil {
 		s.emitEvent("connection", map[string]string{
-			"time":   formatTimestamp(),
+			"time":   time.Now().Format(time.RFC3339),
 			"source": remoteAddr,
 			"error":  "failed to extract SNI: " + err.Error(),
 		})
@@ -194,7 +194,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	route := s.configStore.Lookup(hostname)
 	if route == nil {
 		s.emitEvent("connection", map[string]string{
-			"time":     formatTimestamp(),
+			"time":     time.Now().Format(time.RFC3339),
 			"source":   remoteAddr,
 			"hostname": hostname,
 			"action":   "rejected",
@@ -205,7 +205,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	s.emitEvent("connection", map[string]string{
-		"time":     formatTimestamp(),
+		"time":     time.Now().Format(time.RFC3339),
 		"source":   remoteAddr,
 		"hostname": hostname,
 		"mode":     route.Mode,
