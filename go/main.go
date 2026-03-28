@@ -5,7 +5,7 @@
 //
 //	Entry point for the tls-switch Go binary. Runs a JSON Lines protocol loop
 //	over stdin/stdout — reads requests, dispatches to handlers, writes responses.
-//	Never prints directly to console; all output is structured JSON.
+//	Also emits event lines for connection logging.
 //
 //	(c) 2026 WaterJuice — Released under the Unlicense; see LICENSE.
 //
@@ -28,6 +28,10 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
 )
 
 // ---------------------------------------------------------------------------------------
@@ -47,6 +51,12 @@ type Response struct {
 	Status string `json:"status"`
 	Data   any    `json:"data,omitempty"`
 	Error  string `json:"error,omitempty"`
+}
+
+// Event is an unsolicited JSON Lines message sent from Go to Python.
+type Event struct {
+	Event string `json:"event"`
+	Data  any    `json:"data,omitempty"`
 }
 
 const (
@@ -94,8 +104,26 @@ var ErrNotConfigured = errors.New("server is not configured")
 
 var (
 	configStore = NewConfigStore()
-	server      = NewServer(configStore)
+	server      *Server
+	outputMu    sync.Mutex
+	encoder     *json.Encoder
 )
+
+// ---------------------------------------------------------------------------------------
+// emitEvent sends an event line to stdout (thread-safe).
+func emitEvent(name string, data any) {
+	outputMu.Lock()
+	defer outputMu.Unlock()
+	encoder.Encode(Event{Event: name, Data: data})
+}
+
+// ---------------------------------------------------------------------------------------
+// sendResponse sends a response line to stdout (thread-safe).
+func sendResponse(resp Response) error {
+	outputMu.Lock()
+	defer outputMu.Unlock()
+	return encoder.Encode(resp)
+}
 
 // ---------------------------------------------------------------------------------------
 //
@@ -191,8 +219,12 @@ func handleReload(args json.RawMessage) Response {
 }
 
 // ---------------------------------------------------------------------------------------
-func handleHello(args json.RawMessage) Response {
-	return okResponse(map[string]string{"message": "Hello, World!"})
+func handleVersion(args json.RawMessage) Response {
+	return okResponse(map[string]string{
+		"go":   strings.TrimPrefix(runtime.Version(), "go"),
+		"os":   runtime.GOOS,
+		"arch": runtime.GOARCH,
+	})
 }
 
 // ---------------------------------------------------------------------------------------
@@ -207,7 +239,7 @@ var commands = map[string]func(json.RawMessage) Response{
 	"stop":      handleStop,
 	"status":    handleStatus,
 	"reload":    handleReload,
-	"hello":     handleHello,
+	"version":   handleVersion,
 }
 
 // ---------------------------------------------------------------------------------------
@@ -220,16 +252,18 @@ const maxLineSize = 1024 * 1024 // 1MB max request size
 
 // ---------------------------------------------------------------------------------------
 func main() {
+	encoder = json.NewEncoder(os.Stdout)
+	server = NewServer(configStore, emitEvent)
+
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, maxLineSize), maxLineSize)
-	encoder := json.NewEncoder(os.Stdout)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
 
 		var req Request
 		if err := json.Unmarshal(line, &req); err != nil {
-			if err := encoder.Encode(errResponse("invalid request: expected JSON object")); err != nil {
+			if err := sendResponse(errResponse("invalid request: expected JSON object")); err != nil {
 				return
 			}
 			continue
@@ -237,15 +271,21 @@ func main() {
 
 		handler, ok := commands[req.Command]
 		if !ok {
-			if err := encoder.Encode(errResponse("unknown command: " + req.Command)); err != nil {
+			if err := sendResponse(errResponse("unknown command: " + req.Command)); err != nil {
 				return
 			}
 			continue
 		}
 
 		resp := handler(req.Args)
-		if err := encoder.Encode(resp); err != nil {
+		if err := sendResponse(resp); err != nil {
 			return
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------------------
+// formatTimestamp returns an ISO 8601 timestamp string.
+func formatTimestamp() string {
+	return time.Now().UTC().Format(time.RFC3339)
 }

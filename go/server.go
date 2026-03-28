@@ -5,6 +5,7 @@
 //
 //	TCP listener and connection accept loop. Routes incoming connections based
 //	on SNI hostname lookup. Tracks active connections for graceful shutdown.
+//	Emits connection events for Python-side logging.
 //
 //	(c) 2026 WaterJuice — Released under the Unlicense; see LICENSE.
 //
@@ -22,6 +23,7 @@ package main
 // ---------------------------------------------------------------------------------------
 
 import (
+	"crypto/tls"
 	"errors"
 	"net"
 	"sync"
@@ -36,17 +38,29 @@ import (
 // ---------------------------------------------------------------------------------------
 
 const (
-	sniReadTimeout      = 10 * time.Second
-	tlsHandshakeTimeout = 15 * time.Second
-	backendDialTimeout  = 10 * time.Second
-	acceptBackoffDelay  = 100 * time.Millisecond
+	sniReadTimeout       = 10 * time.Second
+	tlsHandshakeTimeout  = 15 * time.Second
+	backendDialTimeout   = 10 * time.Second
+	acceptBackoffDelay   = 100 * time.Millisecond
+	shutdownDrainTimeout = 5 * time.Second
 )
+
+// HTTP 421 response for unknown hostnames (sent after a self-signed TLS handshake)
+const http421Response = "HTTP/1.1 421 Misdirected Request\r\n" +
+	"Content-Type: text/plain\r\n" +
+	"Content-Length: 58\r\n" +
+	"Connection: close\r\n" +
+	"\r\n" +
+	"421 Misdirected Request\n\nThis hostname is not configured.\n"
 
 // ---------------------------------------------------------------------------------------
 //
 //	Server
 //
 // ---------------------------------------------------------------------------------------
+
+// EventFunc is a callback for emitting events to the Python wrapper.
+type EventFunc func(name string, data any)
 
 // Server manages the TCP listener and routes connections.
 type Server struct {
@@ -56,11 +70,15 @@ type Server struct {
 	running     atomic.Bool
 	activeConns sync.WaitGroup
 	connCount   atomic.Int64
+	emitEvent   EventFunc
 }
 
 // ---------------------------------------------------------------------------------------
-func NewServer(cs *ConfigStore) *Server {
-	return &Server{configStore: cs}
+func NewServer(cs *ConfigStore, emitEvent EventFunc) *Server {
+	return &Server{
+		configStore: cs,
+		emitEvent:   emitEvent,
+	}
 }
 
 // ---------------------------------------------------------------------------------------
@@ -103,7 +121,16 @@ func (s *Server) Stop() {
 	}
 	s.mu.Unlock()
 
-	s.activeConns.Wait()
+	// Wait for active connections to drain, with a timeout
+	done := make(chan struct{})
+	go func() {
+		s.activeConns.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(shutdownDrainTimeout):
+	}
 }
 
 // ---------------------------------------------------------------------------------------
@@ -145,10 +172,16 @@ func (s *Server) handleConnection(conn net.Conn) {
 	defer s.activeConns.Done()
 	defer s.connCount.Add(-1)
 
+	remoteAddr := conn.RemoteAddr().String()
 	conn.SetReadDeadline(time.Now().Add(sniReadTimeout))
 
 	hostname, buffered, err := ExtractSNI(conn)
 	if err != nil {
+		s.emitEvent("connection", map[string]string{
+			"time":   formatTimestamp(),
+			"source": remoteAddr,
+			"error":  "failed to extract SNI: " + err.Error(),
+		})
 		if errors.Is(err, ErrNoSNI) {
 			sendTLSAlert(conn, alertUnrecognizedName)
 		}
@@ -160,10 +193,24 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	route := s.configStore.Lookup(hostname)
 	if route == nil {
-		sendTLSAlert(conn, alertUnrecognizedName)
-		conn.Close()
+		s.emitEvent("connection", map[string]string{
+			"time":     formatTimestamp(),
+			"source":   remoteAddr,
+			"hostname": hostname,
+			"action":   "rejected",
+			"reason":   "unknown hostname",
+		})
+		s.rejectWithHTTP(conn, buffered, hostname)
 		return
 	}
+
+	s.emitEvent("connection", map[string]string{
+		"time":     formatTimestamp(),
+		"source":   remoteAddr,
+		"hostname": hostname,
+		"mode":     route.Mode,
+		"backend":  route.Backend,
+	})
 
 	switch route.Mode {
 	case ModePassthrough:
@@ -173,4 +220,31 @@ func (s *Server) handleConnection(conn net.Conn) {
 	default:
 		conn.Close()
 	}
+}
+
+// ---------------------------------------------------------------------------------------
+// rejectWithHTTP completes a TLS handshake using a cert borrowed from any
+// configured host, then sends an HTTP 421 response. This lets browsers
+// complete the TLS handshake and display the error page rather than showing
+// a generic "can't connect" message.
+func (s *Server) rejectWithHTTP(conn net.Conn, buffered []byte, hostname string) {
+	defer conn.Close()
+
+	tlsConfig := s.configStore.AnyTLSConfig()
+	if tlsConfig == nil {
+		sendTLSAlert(conn, alertUnrecognizedName)
+		return
+	}
+
+	peeked := NewPeekedConn(conn, buffered)
+	tlsConn := tls.Server(peeked, tlsConfig)
+	defer tlsConn.Close()
+
+	tlsConn.SetDeadline(time.Now().Add(tlsHandshakeTimeout))
+	if err := tlsConn.Handshake(); err != nil {
+		return
+	}
+	tlsConn.SetDeadline(time.Time{})
+
+	tlsConn.Write([]byte(http421Response))
 }

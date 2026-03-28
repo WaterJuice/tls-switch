@@ -3,7 +3,8 @@
 #   ---------
 #
 #   Manages the Go binary subprocess and provides a Python interface for sending
-#   commands and receiving responses via JSON Lines over stdin/stdout.
+#   commands and receiving responses via JSON Lines over stdin/stdout. A reader
+#   thread handles both command responses and unsolicited events.
 #
 #   (c) 2026 WaterJuice — Released under the Unlicense; see LICENSE.
 #
@@ -19,7 +20,10 @@
 import json
 import os
 import platform
+import queue
 import subprocess
+import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +46,7 @@ _PLATFORM_MAP: dict[tuple[str, str], str] = {
     ("OpenBSD", "arm64"): "tls-switch-openbsd-arm64",
 }
 
-_STOP_TIMEOUT = 5  # seconds to wait for Go process to exit before killing
+_STOP_TIMEOUT = 5
 
 # ----------------------------------------------------------------------------------------
 #   Exceptions
@@ -57,26 +61,28 @@ class EngineError(Exception):
 #   Engine
 # ----------------------------------------------------------------------------------------
 
+EventCallback = Callable[[str, Any], None]
+
 
 class Engine:
     """Manages the Go binary subprocess for JSON Lines communication.
 
-    Usage:
-        with Engine() as engine:
-            result = engine.send("hello")
-            print(result["message"])
+    Events from the Go engine are dispatched to the event_callback if provided.
+    Command responses are queued internally for the send() method.
     """
 
     # ------------------------------------------------------------------------------------
-    def __init__(self) -> None:
+    def __init__(self, event_callback: EventCallback | None = None) -> None:
         self._process: subprocess.Popen[bytes] | None = None
+        self._event_callback = event_callback
+        self._response_queue: queue.Queue[dict[str, Any]] = queue.Queue()
+        self._reader_thread: threading.Thread | None = None
 
     # ------------------------------------------------------------------------------------
     def start(self) -> None:
-        """Start the Go binary subprocess."""
+        """Start the Go binary subprocess and reader thread."""
         binary = _get_binary_path()
 
-        # Ensure the binary is executable (may be needed after wheel install on Unix)
         if os.name != "nt" and not os.access(binary, os.X_OK):
             binary.chmod(binary.stat().st_mode | 0o111)
 
@@ -92,6 +98,11 @@ class Engine:
                 f"Binary not found: {binary}\n"
                 f"Run 'make go-build' to compile the Go binaries."
             ) from None
+
+        self._reader_thread = threading.Thread(
+            target=self._read_loop, daemon=True, name="engine-reader"
+        )
+        self._reader_thread.start()
 
     # ------------------------------------------------------------------------------------
     def stop(self) -> None:
@@ -109,15 +120,11 @@ class Engine:
 
     # ------------------------------------------------------------------------------------
     def send(self, command: str, args: dict[str, Any] | None = None) -> Any:
-        """Send a command to the Go binary and return the response data.
+        """Send a command and return the response data.
 
-        Raises EngineError if the engine returns an error status or is not running.
+        Raises EngineError on error status, broken pipe, or unexpected exit.
         """
-        if (
-            self._process is None
-            or self._process.stdin is None
-            or self._process.stdout is None
-        ):
+        if self._process is None or self._process.stdin is None:
             raise EngineError("Engine is not running")
 
         request: dict[str, Any] = {"command": command}
@@ -131,19 +138,33 @@ class Engine:
         except (BrokenPipeError, OSError) as e:
             raise EngineError(f"Engine process died: {e}") from None
 
-        response_line = self._process.stdout.readline()
-        if not response_line:
-            raise EngineError("Engine process exited unexpectedly")
-
         try:
-            response: dict[str, Any] = json.loads(response_line)
-        except json.JSONDecodeError as e:
-            raise EngineError(f"Invalid response from engine: {e}") from None
+            response = self._response_queue.get(timeout=30)
+        except queue.Empty:
+            raise EngineError("Engine did not respond in time") from None
 
         if response.get("status") == "error":
             raise EngineError(response.get("error", "unknown error"))
 
         return response.get("data")
+
+    # ------------------------------------------------------------------------------------
+    def _read_loop(self) -> None:
+        """Background thread: read JSON lines, dispatch events, queue responses."""
+        assert self._process is not None and self._process.stdout is not None
+        for raw_line in self._process.stdout:
+            if not raw_line:
+                break
+            try:
+                msg: dict[str, Any] = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
+
+            if "event" in msg:
+                if self._event_callback:
+                    self._event_callback(msg["event"], msg.get("data"))
+            else:
+                self._response_queue.put(msg)
 
     # ------------------------------------------------------------------------------------
     def __enter__(self) -> "Engine":

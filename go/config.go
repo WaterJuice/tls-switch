@@ -93,3 +93,19 @@ func (cs *ConfigStore) Lookup(hostname string) *HostRoute {
 	}
 	return cfg.Hosts[hostname]
 }
+
+// ---------------------------------------------------------------------------------------
+// AnyTLSConfig returns the TLS config from any configured terminate-mode host.
+// Used to borrow a valid cert for rejecting unknown hostnames with an HTTP error.
+func (cs *ConfigStore) AnyTLSConfig() *tls.Config {
+	cfg := cs.config.Load()
+	if cfg == nil {
+		return nil
+	}
+	for _, route := range cfg.Hosts {
+		if route.TLSConfig != nil {
+			return route.TLSConfig
+		}
+	}
+	return nil
+}

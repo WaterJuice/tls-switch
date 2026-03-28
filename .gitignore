@@ -44,5 +44,8 @@ tls_switch/_version.py
 tls_switch/bin/tls-switch-*
 go/tls-switch
 
+# Local test data
+/local
+
 # macOS
 .DS_Store
