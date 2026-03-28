@@ -16,9 +16,15 @@
 #   Imports
 # ----------------------------------------------------------------------------------------
 
+import signal
 import sys
+import threading
+from pathlib import Path
+from typing import Any
 from .argbuilder import ArgsParser
 from .argbuilder import Namespace
+from .config import ConfigError
+from .config import load_config
 from .engine import Engine
 from .engine import EngineError
 from .version import VERSION_STR
@@ -50,7 +56,7 @@ def _create_parser() -> ArgsParser:
     """Build the argument parser with subcommands."""
     parser = ArgsParser(
         prog="tls-switch",
-        description="TLS switch utility.",
+        description="SNI-based TLS reverse proxy.",
         version=f"tls-switch {VERSION_STR}",
     )
 
@@ -60,6 +66,17 @@ def _create_parser() -> ArgsParser:
         action="store_true",
         dest="license",
         help="Show license information and exit",
+    )
+
+    # run ----------------------------------------------------------------------
+    run_cmd = parser.add_command(
+        "run",
+        help="Start the TLS switch server",
+    )
+    run_cmd.add_argument(
+        "config",
+        metavar="CONFIG",
+        help="Path to the JSON config file",
     )
 
     # hello --------------------------------------------------------------------
@@ -77,9 +94,53 @@ def _create_parser() -> ArgsParser:
 
 
 # ----------------------------------------------------------------------------------------
+def _cmd_run(engine: Engine, args: Namespace) -> int:
+    """Load config and start the TLS switch server."""
+    config_path = Path(args.config)
+
+    # Load and validate config (Python side)
+    try:
+        config_payload = load_config(config_path)
+    except ConfigError as e:
+        print(f"Config error: {e}", file=sys.stderr)
+        return 1
+
+    # Send config to Go engine
+    result: dict[str, Any] = engine.send("configure", config_payload) or {}
+    host_count: int = result.get("hosts", 0)
+    print(f"Configured {host_count} host(s)")
+
+    # Start the server
+    result = engine.send("start") or {}
+    listen_addr: str = result.get("listening", "")
+    print(f"Listening on {listen_addr}")
+
+    # Wait until SIGINT or SIGTERM
+    shutdown = threading.Event()
+
+    def _signal_handler(_signum: int, _frame: object) -> None:
+        shutdown.set()
+
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
+
+    print("Press Ctrl+C to stop")
+    shutdown.wait()
+    print("\nShutting down...")
+
+    try:
+        engine.send("stop")
+    except EngineError:
+        pass  # engine may already be dead
+
+    print("Stopped")
+    return 0
+
+
+# ----------------------------------------------------------------------------------------
 def _cmd_hello(engine: Engine) -> int:
     """Send hello command to the Go engine and print the result."""
-    result = engine.send("hello")
+    result: dict[str, Any] = engine.send("hello") or {}
     print(result.get("message", ""))
     return 0
 
@@ -131,6 +192,8 @@ def _main_inner() -> int:
 
     try:
         with Engine() as engine:
+            if command == "run":
+                return _cmd_run(engine, args)
             if command == "hello":
                 return _cmd_hello(engine)
     except EngineError as e:

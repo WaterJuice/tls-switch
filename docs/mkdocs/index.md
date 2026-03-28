@@ -1,14 +1,22 @@
 # tls-switch
 
-A TLS switch utility.
+A TLS reverse proxy that routes incoming TLS connections to backend servers based on the requested hostname using SNI (Server Name Indication).
+
+tls-switch sits in front of your services on port 443 and inspects the TLS ClientHello to determine which hostname the client is requesting. SNI is a TLS extension that allows the client to indicate which hostname it is trying to connect to before the TLS handshake completes — this is how tls-switch knows where to route the connection without needing a separate IP address per service. It then routes the connection to the appropriate backend, either terminating TLS and forwarding plaintext, or passing the encrypted stream through unmodified.
 
 ## Features
 
-- **Zero dependencies** — Python 3.12+ stdlib only
+- **SNI-based routing** — route TLS connections to different backends based on hostname
+- **TLS termination** — terminate TLS with your certificates and forward plaintext to backends
+- **TLS passthrough** — forward the raw TLS stream to a backend that handles its own TLS
+- **Hot reload** — config and certificate changes take effect without interrupting existing connections
+- **Zero buffering** — data is forwarded immediately with no processing or modification
+- **Efficient** — Go networking engine with zero-copy forwarding
 
 ## Requirements
 
 - Python 3.12+
+- Root/administrator privileges (binding to port 443)
 
 ## Quick Start
 
@@ -24,10 +32,46 @@ Or run directly with uv:
 uvx tls-switch
 ```
 
+### Configure
+
+Create a config file (`config.json`):
+
+```json
+{
+  "listen": ":443",
+  "hosts": {
+    "app.example.com": {
+      "mode": "terminate",
+      "cert": "/etc/tls-switch/app.crt",
+      "key": "/etc/tls-switch/app.key",
+      "backend": "127.0.0.1:8080"
+    },
+    "legacy.example.com": {
+      "mode": "passthrough",
+      "backend": "10.0.0.5:443"
+    }
+  }
+}
+```
+
 ### Run
 
 ```bash
-tls-switch hello
+tls-switch run config.json
 ```
 
-See the [Usage](usage.md) page for full details.
+See the [Usage](usage.md) page for full details on configuration and operation.
+
+## How It Works
+
+1. A client connects to port 443 and begins a TLS handshake
+2. tls-switch reads the ClientHello and extracts the SNI hostname
+3. The hostname is looked up in the configuration
+4. Depending on the mode:
+   - **terminate**: tls-switch completes the TLS handshake, then forwards plaintext to the backend
+   - **passthrough**: tls-switch forwards the raw TLS stream to the backend, which handles TLS itself
+5. Data is copied bidirectionally with no buffering, filtering, or modification
+
+## Architecture
+
+tls-switch is a Python+Go hybrid. Go handles all networking (TCP listener, TLS, SNI extraction, data forwarding). Python handles the CLI, config parsing, certificate validation, file watching, and error reporting. They communicate via JSON Lines over stdin/stdout.

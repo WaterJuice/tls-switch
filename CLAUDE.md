@@ -2,20 +2,48 @@
 
 ## Project Overview
 
-tls-switch is a WaterJuice project. The core engine is written in Go, with a Python wrapper that handles CLI argument parsing and dispatches to pre-built Go binaries.
+tls-switch is a WaterJuice project. It is an SNI-based TLS reverse proxy that routes incoming TLS connections to backend servers based on hostname. It supports two modes per host:
+
+- **terminate** — complete the TLS handshake with configured cert/key, forward plaintext to backend
+- **passthrough** — forward the raw TLS stream (including ClientHello) to the backend, which handles TLS itself
+
+The core networking engine is written in Go. Python handles CLI, config parsing, certificate validation, file watching, and error reporting.
+
+### Design Principles
+
+- **Never interrupt existing connections** — hot reload applies only to new connections
+- **Zero buffering** — data is forwarded immediately with no processing, filtering, or modification
+- **Robust** — designed to stay up forever, efficient in CPU and memory
+- **All user output from Python** — Go engine never prints to console, communicates only via JSON Lines
 
 ## Architecture
 
-- **Go binary** (`go/main.go`) — the engine, cross-compiled for 10 platforms. Runs as a persistent subprocess communicating via JSON Lines over stdin/stdout. Never prints to console.
-- **Python package** (`tls_switch/`) — CLI wrapper using argbuilder for argument parsing. `engine.py` manages the Go subprocess; `cli.py` handles all user-facing output.
+- **Go engine** (`go/`) — TCP listener, SNI extraction from ClientHello, TLS termination via `crypto/tls`, bidirectional `io.Copy` forwarding. Runs as a persistent subprocess.
+- **Python package** (`tls_switch/`) — CLI via argbuilder, config file parsing/validation, cert/key validation, file watching for hot reload, all user-facing output.
 - Pre-built Go binaries live in `tls_switch/bin/` (gitignored, included in wheel via hatch artifacts)
-- **Platform-specific wheels** — `scripts/build_wheels.py` splits a fat wheel into per-platform wheels, each containing only the relevant binary
+- **Platform-specific wheels** — `scripts/build_wheels.py` splits a fat wheel into per-platform wheels
+
+### Go File Structure
+
+- `go/main.go` — JSON Lines protocol loop, command dispatch
+- `go/server.go` — TCP listener, connection accept loop
+- `go/sni.go` — ClientHello parsing, SNI extraction
+- `go/config.go` — config types, atomic swap for hot reload
+- `go/proxy.go` — bidirectional copy, passthrough and terminate modes
+
+### Protocol Commands
+
+- `configure` — send validated config (host routes, PEM cert/key data, listen address)
+- `start` — begin accepting connections
+- `stop` — graceful shutdown (drain existing connections)
+- `status` — return listener state, connection count
+- `reload` — atomic config swap for new connections
 
 ### Python-Go Communication Protocol
 
 JSON Lines over stdin/stdout. Python sends one JSON object per line, Go responds with one JSON object per line.
 
-Request: `{"command": "hello", "args": {...}}`
+Request: `{"command": "configure", "args": {...}}`
 Response (success): `{"status": "ok", "data": {...}}`
 Response (error): `{"status": "error", "error": "message"}`
 
@@ -41,7 +69,7 @@ Go command handlers are registered in the `commands` map. The `Engine` class in 
 - `make dev` — set up Python dev environment (.venv)
 - `make go-build` — cross-compile Go binaries for all 10 platforms (static, CGO_ENABLED=0)
 - `make build` — full build (lint, go-build, version, docs, platform wheels)
-- `make check` — format check (ruff + gofmt) + pyright lint
+- `make check` — format check (ruff + gofmt) + pyright + go vet
 - `make format` — auto-format Python with ruff, Go with gofmt
 - `make clean` — remove build artefacts and compiled binaries
 
@@ -54,14 +82,14 @@ Go binaries are statically linked (`CGO_ENABLED=0 -ldflags='-s -w'`).
 - Go separator lines: `// ` followed by 87 dashes (90 chars total)
 - All source files have a header block with: filename, description, copyright, version history
 - Python: ruff formatting + pyright strict type checking
-- Go: gofmt formatting
+- Go: gofmt formatting + go vet
 - Zero runtime dependencies — Python stdlib only
 
 ## Key Files
 
 - `Makefile` — build orchestration
 - `pyproject.toml` — Python package config (hatch + uv-dynamic-versioning)
-- `go/main.go` — Go entry point
+- `go/main.go` — Go entry point, protocol loop
 - `go/go.mod` — Go module definition
 - `tls_switch/cli.py` — Python CLI, argument parsing, user-facing output
 - `tls_switch/engine.py` — manages Go subprocess, JSON Lines protocol, platform detection

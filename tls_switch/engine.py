@@ -42,6 +42,8 @@ _PLATFORM_MAP: dict[tuple[str, str], str] = {
     ("OpenBSD", "arm64"): "tls-switch-openbsd-arm64",
 }
 
+_STOP_TIMEOUT = 5  # seconds to wait for Go process to exit before killing
+
 # ----------------------------------------------------------------------------------------
 #   Exceptions
 # ----------------------------------------------------------------------------------------
@@ -93,12 +95,16 @@ class Engine:
 
     # ------------------------------------------------------------------------------------
     def stop(self) -> None:
-        """Stop the Go binary subprocess."""
+        """Stop the Go binary subprocess gracefully, with kill fallback."""
         if self._process is None:
             return
         if self._process.stdin:
             self._process.stdin.close()
-        self._process.wait()
+        try:
+            self._process.wait(timeout=_STOP_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            self._process.kill()
+            self._process.wait()
         self._process = None
 
     # ------------------------------------------------------------------------------------
@@ -129,7 +135,10 @@ class Engine:
         if not response_line:
             raise EngineError("Engine process exited unexpectedly")
 
-        response: dict[str, Any] = json.loads(response_line)
+        try:
+            response: dict[str, Any] = json.loads(response_line)
+        except json.JSONDecodeError as e:
+            raise EngineError(f"Invalid response from engine: {e}") from None
 
         if response.get("status") == "error":
             raise EngineError(response.get("error", "unknown error"))

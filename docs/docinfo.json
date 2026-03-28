@@ -1,4 +1,4 @@
 {
   "title": "tls-switch",
-  "description": "TLS switch utility"
+  "description": "SNI-based TLS reverse proxy with termination and passthrough modes"
 }
