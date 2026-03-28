@@ -6,10 +6,20 @@ tls-switch is a WaterJuice project. The core engine is written in Go, with a Pyt
 
 ## Architecture
 
-- **Go binary** (`go/main.go`) — the actual engine, cross-compiled for 10 platforms
-- **Python package** (`tls_switch/`) — CLI wrapper using argbuilder for argument parsing, detects platform and executes the correct Go binary
+- **Go binary** (`go/main.go`) — the engine, cross-compiled for 10 platforms. Runs as a persistent subprocess communicating via JSON Lines over stdin/stdout. Never prints to console.
+- **Python package** (`tls_switch/`) — CLI wrapper using argbuilder for argument parsing. `engine.py` manages the Go subprocess; `cli.py` handles all user-facing output.
 - Pre-built Go binaries live in `tls_switch/bin/` (gitignored, included in wheel via hatch artifacts)
 - **Platform-specific wheels** — `scripts/build_wheels.py` splits a fat wheel into per-platform wheels, each containing only the relevant binary
+
+### Python-Go Communication Protocol
+
+JSON Lines over stdin/stdout. Python sends one JSON object per line, Go responds with one JSON object per line.
+
+Request: `{"command": "hello", "args": {...}}`
+Response (success): `{"status": "ok", "data": {...}}`
+Response (error): `{"status": "error", "error": "message"}`
+
+Go command handlers are registered in the `commands` map. The `Engine` class in Python manages the subprocess lifecycle and provides `engine.send(command, args)` which returns the `data` field or raises `EngineError`.
 
 ### Supported Platforms
 
@@ -53,7 +63,8 @@ Go binaries are statically linked (`CGO_ENABLED=0 -ldflags='-s -w'`).
 - `pyproject.toml` — Python package config (hatch + uv-dynamic-versioning)
 - `go/main.go` — Go entry point
 - `go/go.mod` — Go module definition
-- `tls_switch/cli.py` — Python CLI with platform detection and binary execution
+- `tls_switch/cli.py` — Python CLI, argument parsing, user-facing output
+- `tls_switch/engine.py` — manages Go subprocess, JSON Lines protocol, platform detection
 - `tls_switch/argbuilder.py` — argument parsing library (shared across WaterJuice projects)
 - `tls_switch/version.py` — version handling (imports from generated `_version.py`)
 - `scripts/build_wheels.py` — splits fat wheel into per-platform wheels

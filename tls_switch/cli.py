@@ -2,8 +2,8 @@
 #   cli.py
 #   ------
 #
-#   CLI argument parsing and command handlers. Detects the current platform
-#   and executes the appropriate pre-built Go binary.
+#   CLI argument parsing and command handlers. Uses the Engine class to
+#   communicate with the Go binary via JSON Lines over stdin/stdout.
 #
 #   (c) 2026 WaterJuice — Released under the Unlicense; see LICENSE.
 #
@@ -16,34 +16,16 @@
 #   Imports
 # ----------------------------------------------------------------------------------------
 
-import os
-import platform
-import subprocess
 import sys
-from pathlib import Path
 from .argbuilder import ArgsParser
 from .argbuilder import Namespace
+from .engine import Engine
+from .engine import EngineError
 from .version import VERSION_STR
 
 # ----------------------------------------------------------------------------------------
 #   Constants
 # ----------------------------------------------------------------------------------------
-
-_BIN_DIR = Path(__file__).parent / "bin"
-
-# Map (system, machine) to binary name
-_PLATFORM_MAP: dict[tuple[str, str], str] = {
-    ("Darwin", "arm64"): "tls-switch-darwin-arm64",
-    ("Darwin", "x86_64"): "tls-switch-darwin-amd64",
-    ("Linux", "aarch64"): "tls-switch-linux-arm64",
-    ("Linux", "x86_64"): "tls-switch-linux-amd64",
-    ("Windows", "AMD64"): "tls-switch-windows-amd64.exe",
-    ("Windows", "ARM64"): "tls-switch-windows-arm64.exe",
-    ("FreeBSD", "amd64"): "tls-switch-freebsd-amd64",
-    ("FreeBSD", "arm64"): "tls-switch-freebsd-arm64",
-    ("OpenBSD", "amd64"): "tls-switch-openbsd-amd64",
-    ("OpenBSD", "arm64"): "tls-switch-openbsd-arm64",
-}
 
 _LICENCE_TEXT = """\
 tls-switch — Released under the Unlicense (public domain)
@@ -57,53 +39,6 @@ means.
 
 For more information, please refer to <https://unlicense.org/>
 """
-
-# ----------------------------------------------------------------------------------------
-#   Binary Resolution
-# ----------------------------------------------------------------------------------------
-
-
-# ----------------------------------------------------------------------------------------
-def _get_binary_path() -> Path:
-    """Return the path to the Go binary for the current platform."""
-    key = (platform.system(), platform.machine())
-    binary_name = _PLATFORM_MAP.get(key)
-    if binary_name is None:
-        print(
-            f"Unsupported platform: {key[0]} {key[1]}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    return _BIN_DIR / binary_name
-
-
-# ----------------------------------------------------------------------------------------
-def _run_binary(args: list[str]) -> int:
-    """Execute the Go binary with the given arguments."""
-    binary = _get_binary_path()
-
-    # Ensure the binary is executable (may be needed after wheel install on Unix)
-    if os.name != "nt" and not os.access(binary, os.X_OK):
-        binary.chmod(binary.stat().st_mode | 0o111)
-
-    try:
-        result = subprocess.run(
-            [str(binary)] + args,
-            stdin=sys.stdin,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-        )
-    except FileNotFoundError:
-        print(
-            f"Binary not found: {binary}\n"
-            f"Run 'make go-build' to compile the Go binaries.",
-            file=sys.stderr,
-        )
-        return 1
-
-    return result.returncode
-
 
 # ----------------------------------------------------------------------------------------
 #   Argument Parser
@@ -130,10 +65,23 @@ def _create_parser() -> ArgsParser:
     # hello --------------------------------------------------------------------
     parser.add_command(
         "hello",
-        help="Print a hello world message (via Go binary)",
+        help="Print a hello world message (via Go engine)",
     )
 
     return parser
+
+
+# ----------------------------------------------------------------------------------------
+#   Subcommand Handlers
+# ----------------------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------------------
+def _cmd_hello(engine: Engine) -> int:
+    """Send hello command to the Go engine and print the result."""
+    result = engine.send("hello")
+    print(result.get("message", ""))
+    return 0
 
 
 # ----------------------------------------------------------------------------------------
@@ -177,9 +125,16 @@ def _main_inner() -> int:
 
     command = args.command if hasattr(args, "command") else None
 
-    if command == "hello":
-        return _run_binary([])
+    if command is None:
+        parser.parse(["--help"])
+        return 0
 
-    # Default: show help
-    parser.parse(["--help"])
+    try:
+        with Engine() as engine:
+            if command == "hello":
+                return _cmd_hello(engine)
+    except EngineError as e:
+        print(f"Engine error: {e}", file=sys.stderr)
+        return 1
+
     return 0
