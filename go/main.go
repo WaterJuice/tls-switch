@@ -92,7 +92,7 @@ func main() {
 		if err := json.Unmarshal(line, &req); err != nil {
 			if err := encoder.Encode(Response{
 				Status: "error",
-				Error:  "invalid request: " + err.Error(),
+				Error:  "invalid request: expected JSON object",
 			}); err != nil {
 				return
 			}
