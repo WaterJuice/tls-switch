@@ -91,7 +91,8 @@ Go binaries are statically linked (`CGO_ENABLED=0 -ldflags='-s -w'`).
 - `pyproject.toml` — Python package config (hatch + uv-dynamic-versioning)
 - `go/main.go` — Go entry point, protocol loop
 - `go/go.mod` — Go module definition
-- `tls_switch/cli.py` — Python CLI, argument parsing, user-facing output
+- `tls_switch/cli.py` — Python CLI, argument parsing, logging, file watching, user-facing output
+- `tls_switch/config.py` — JSON config parsing, cert/key validation
 - `tls_switch/engine.py` — manages Go subprocess, JSON Lines protocol, platform detection
 - `tls_switch/argbuilder.py` — argument parsing library (shared across WaterJuice projects)
 - `tls_switch/version.py` — version handling (imports from generated `_version.py`)
@@ -100,7 +101,9 @@ Go binaries are statically linked (`CGO_ENABLED=0 -ldflags='-s -w'`).
 ## Testing
 
 ```bash
-make go-build            # must build Go binaries first
-uv run tls-switch hello  # runs Go binary via Python wrapper
-make check               # format check + lint
+make go-build                          # must build Go binaries first
+uv run tls-switch --version            # check versions (python + go)
+uv run tls-switch --example-config     # print example config
+uv run tls-switch -c local/config.json # run with a config file
+make check                             # format check + lint
 ```

@@ -24,7 +24,7 @@ tls-switch sits in front of your services on port 443 and inspects the TLS Clien
 ## Requirements
 
 - Python 3.12+
-- Root/administrator privileges (binding to port 443)
+- Root/administrator privileges (if binding to port 443)
 
 ## Installation
 
@@ -63,7 +63,7 @@ Create a config file (`config.json`):
 Run the server:
 
 ```bash
-tls-switch run config.json
+tls-switch -c config.json
 ```
 
 In this example:
@@ -78,7 +78,7 @@ In this example:
 4. Depending on the mode:
    - **terminate**: tls-switch completes the TLS handshake using the configured certificate and key, then opens a plaintext TCP connection to the backend and copies data bidirectionally with no buffering or processing
    - **passthrough**: tls-switch opens a TCP connection to the backend, replays the original ClientHello, and then copies data bidirectionally — the backend server handles the TLS handshake itself
-5. If the hostname is not found in the configuration, a TLS `unrecognized_name` alert is sent and the connection is closed — no certificate is presented for unknown hostnames
+5. If the hostname is not found in the configuration, tls-switch completes a TLS handshake using any available configured certificate and returns an HTTP 421 Misdirected Request error page — browsers display a clear error rather than a cryptic "can't connect" message
 
 ## Configuration
 

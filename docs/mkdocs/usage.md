@@ -3,12 +3,26 @@
 ## Running the Server
 
 ```bash
-tls-switch run config.json
+tls-switch -c config.json
+```
+
+Or with the long form:
+
+```bash
+tls-switch --config config.json
 ```
 
 The server starts listening on the configured address (default `:443`) and routes incoming TLS connections based on the SNI hostname.
 
-The server runs in the foreground and logs connection events to stderr. Press Ctrl+C to stop.
+The server runs in the foreground and logs connection events to stderr with timestamps and ANSI colours (when connected to a terminal). Press Ctrl+C to stop gracefully (drains active connections), or Ctrl+C twice to force-stop immediately.
+
+## Example Config
+
+To generate an example config file:
+
+```bash
+tls-switch --example-config > config.json
+```
 
 ## Configuration
 
@@ -50,6 +64,8 @@ Each host entry:
 | `cert` | terminate only | Path to PEM certificate file (may include full chain) |
 | `key` | terminate only | Path to PEM private key file |
 
+Certificate and key paths may be absolute or relative to the config file's directory.
+
 ### Routing Modes
 
 #### `terminate` — TLS Termination
@@ -86,17 +102,19 @@ No `cert` or `key` fields are needed for passthrough mode.
 
 ### Unknown Hostnames
 
-If a client requests a hostname not in the configuration, tls-switch sends a TLS `unrecognized_name` alert and closes the connection. No certificate is presented for unknown hostnames — this avoids accidentally signing responses with the wrong hostname's certificate (a common problem with servers like nginx that fall back to the first configured certificate).
+If a client requests a hostname not in the configuration, tls-switch completes a TLS handshake using any available configured certificate and returns an HTTP 421 Misdirected Request error page. This gives browsers a clear error message rather than a cryptic "can't connect".
+
+If no terminate-mode hosts are configured (all hosts are passthrough), a TLS `unrecognized_name` alert is sent instead.
 
 ## Hot Reload
 
-tls-switch watches the config file and all referenced certificate and key files for changes. When a change is detected:
+tls-switch watches the config file and all referenced certificate and key files for changes (polling every 2 seconds). When a change is detected:
 
 1. The new config is parsed and validated
 2. Certificate and key files are checked (correct format, cert matches key, etc.)
 3. If valid, the new config is applied — **new connections** use the updated config
 4. **Existing connections** continue with their original config until they close naturally
-5. If the new config is invalid, the change is rejected and a warning is printed — the server continues with the previous valid config
+5. If the new config is invalid, the change is rejected and a warning is logged — the server continues with the previous valid config
 
 This means you can:
 
@@ -104,8 +122,27 @@ This means you can:
 - Add or remove host routes while the server is running
 - Change backend addresses for individual hosts
 
+## Connection Logging
+
+tls-switch logs each connection to stderr with timestamps, source IP, hostname, routing mode, and backend address. When connected to a terminal, output is coloured for readability. Colours are automatically disabled when stderr is piped to a file.
+
+Example output:
+
+```
+2026-03-28 16:05:52 +1100 tls-switch 1.0.0b1 (python 3.14.3, go 1.26.0)
+2026-03-28 16:05:52 +1100 Configured 2 host(s):
+2026-03-28 16:05:52 +1100   app.example.com (terminate) → 127.0.0.1:8080
+2026-03-28 16:05:52 +1100   legacy.example.com (passthrough) → 10.0.0.5:443
+2026-03-28 16:05:52 +1100 Listening on :443
+2026-03-28 16:05:52 +1100 Ready (Ctrl+C to stop)
+2026-03-28 16:05:54 +1100 10.0.0.1:54321 → app.example.com (terminate) → 127.0.0.1:8080
+2026-03-28 16:05:55 +1100 10.0.0.2:54322 → unknown.example.com — unknown hostname
+```
+
 ## Common Options
 
-- `--version` — show version and exit
+- `--config FILE`, `-c FILE` — path to the JSON config file (required)
+- `--example-config` — print an example config file and exit
+- `--version` — show tls-switch, Python, and Go versions
 - `--license` — show license information and exit
 - `--help` — show help

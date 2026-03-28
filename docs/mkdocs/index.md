@@ -16,7 +16,7 @@ tls-switch sits in front of your services on port 443 and inspects the TLS Clien
 ## Requirements
 
 - Python 3.12+
-- Root/administrator privileges (binding to port 443)
+- Root/administrator privileges (if binding to port 443)
 
 ## Quick Start
 
@@ -57,7 +57,7 @@ Create a config file (`config.json`):
 ### Run
 
 ```bash
-tls-switch run config.json
+tls-switch -c config.json
 ```
 
 See the [Usage](usage.md) page for full details on configuration and operation.
