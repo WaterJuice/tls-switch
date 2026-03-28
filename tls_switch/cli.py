@@ -350,7 +350,7 @@ def _main_inner() -> int:
             go_ver: str = go_info.get("go", "?")
             _log(
                 f"tls-switch {_cyan(VERSION_STR)}"
-                f" {_dim('(python ' + sys.version.split()[0] + ', ' + str(go_ver) + ')')}"
+                f" {_dim('(python ' + sys.version.split()[0] + ', go ' + str(go_ver) + ')')}"
             )
 
             # Send config to engine
