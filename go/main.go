@@ -119,17 +119,43 @@ func main() {
 
 // ---------------------------------------------------------------------------------------
 func printUsage() {
-	fmt.Println("usage: tls-switch [--help] [--version] [--license] [--config FILE]")
-	fmt.Println("                  [--example-config]")
-	fmt.Println()
-	fmt.Println("SNI-based TLS reverse proxy.")
-	fmt.Println()
-	fmt.Println("options:")
-	fmt.Println("  -h, --help        show this help message and exit")
-	fmt.Println("  --version         show version and exit")
-	fmt.Println("  --license         show license information and exit")
-	fmt.Println("  --config, -c FILE path to the JSON config file")
-	fmt.Println("  --example-config  print an example config file and exit")
+	tty := isStdoutTerminal()
+	if tty {
+		// Match Python 3.14 argparse colour scheme
+		h := "\033[1;34m" // bold blue — headings
+		p := "\033[1;35m" // bold magenta — prog name
+		s := "\033[32m"   // green — short options (usage line)
+		l := "\033[36m"   // cyan — long options (usage line)
+		m := "\033[33m"   // yellow — metavars (usage line)
+		S := "\033[1;32m" // bold green — short options (option list)
+		L := "\033[1;36m" // bold cyan — long options (option list)
+		M := "\033[1;33m" // bold yellow — metavars (option list)
+		r := "\033[0m"    // reset
+
+		fmt.Printf("%susage: %s%stls-switch%s [%s-h%s] [%s--version%s] [%s--license%s] [%s--config %s%sFILE%s]\n", h, r, p, r, s, r, l, r, l, r, l, r, m, r)
+		fmt.Printf("                  [%s--example-config%s]\n", l, r)
+		fmt.Println()
+		fmt.Println("SNI-based TLS reverse proxy.")
+		fmt.Println()
+		fmt.Printf("%soptions:%s\n", h, r)
+		fmt.Printf("  %s-h%s, %s--help%s         show this help message and exit\n", S, r, L, r)
+		fmt.Printf("  %s--version%s          show version and exit\n", L, r)
+		fmt.Printf("  %s--license%s          show license information and exit\n", L, r)
+		fmt.Printf("  %s--config%s, %s-c%s %sFILE%s  path to the JSON config file\n", L, r, S, r, M, r)
+		fmt.Printf("  %s--example-config%s   print an example config file and exit\n", L, r)
+	} else {
+		fmt.Println("usage: tls-switch [-h] [--version] [--license] [--config FILE]")
+		fmt.Println("                  [--example-config]")
+		fmt.Println()
+		fmt.Println("SNI-based TLS reverse proxy.")
+		fmt.Println()
+		fmt.Println("options:")
+		fmt.Println("  -h, --help         show this help message and exit")
+		fmt.Println("  --version          show version and exit")
+		fmt.Println("  --license          show license information and exit")
+		fmt.Println("  --config, -c FILE  path to the JSON config file")
+		fmt.Println("  --example-config   print an example config file and exit")
+	}
 }
 
 // ---------------------------------------------------------------------------------------
@@ -345,6 +371,15 @@ func logEvent(isTTY bool, event string, data any) {
 // ---------------------------------------------------------------------------------------
 func isTerminal() bool {
 	info, err := os.Stderr.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
+// ---------------------------------------------------------------------------------------
+func isStdoutTerminal() bool {
+	info, err := os.Stdout.Stat()
 	if err != nil {
 		return false
 	}
