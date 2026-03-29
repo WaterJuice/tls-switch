@@ -59,15 +59,11 @@ Go command handlers are registered in the `commands` map. The `Engine` class in 
 | Linux arm64 | `tls-switch-linux-arm64` | `manylinux_2_17_aarch64` |
 | Windows amd64 | `tls-switch-windows-amd64.exe` | `win_amd64` |
 | Windows arm64 | `tls-switch-windows-arm64.exe` | `win_arm64` |
-| FreeBSD amd64 | `tls-switch-freebsd-amd64` | `freebsd_13_0_x86_64` |
-| FreeBSD arm64 | `tls-switch-freebsd-arm64` | `freebsd_13_0_aarch64` |
-| OpenBSD amd64 | `tls-switch-openbsd-amd64` | `openbsd_7_0_x86_64` |
-| OpenBSD arm64 | `tls-switch-openbsd-arm64` | `openbsd_7_0_aarch64` |
 
 ## Build System
 
 - `make dev` — set up Python dev environment (.venv)
-- `make go-build` — cross-compile Go binaries for all 10 platforms (static, CGO_ENABLED=0)
+- `make go-build` — cross-compile Go binaries for all 6 platforms (static, CGO_ENABLED=0)
 - `make build` — full build (lint, go-build, version, docs, platform wheels)
 - `make check` — format check (ruff + gofmt) + pyright + go vet
 - `make format` — auto-format Python with ruff, Go with gofmt

@@ -1,6 +1,6 @@
-# tls-switch 1.0.0 Beta 3 — 29 Mar 2026
+# tls-switch 1.0.0 Beta 4 — 29 Mar 2026
 
-Initial beta release.
+Initial release.
 
 ## Features
 
@@ -15,5 +15,5 @@ Initial beta release.
 - **JSON config** — simple JSON configuration file for host routing
 - **`--example-config`** — generate a template config file
 - **Graceful shutdown** — first Ctrl+C drains active connections, second force-stops
-- **10 platform builds** — macOS, Linux, Windows, FreeBSD, OpenBSD (amd64 + arm64)
+- **6 platform builds** — macOS, Linux, Windows (amd64 + arm64)
 - **Zero runtime dependencies** — Python 3.12+ stdlib only, statically linked Go binary
