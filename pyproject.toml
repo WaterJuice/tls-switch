@@ -9,7 +9,7 @@ exclude = ["tls_switch/bin/.gitkeep"]
 [project]
 name = "tls-switch"
 requires-python = ">=3.12"
-version = "0.0.0"
+dynamic = ["version"]
 license = "Unlicense"
 authors = [
     { name = "WaterJuice" },
@@ -35,8 +35,15 @@ Source = "https://github.com/WaterJuice/tls-switch"
 tls-switch = "tls_switch.__main__:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+pattern = "default-unprefixed"
 
 [tool.uv]
 
