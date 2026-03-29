@@ -41,14 +41,14 @@ wheels = [
 
 [[package]]
 name = "cal-publish-python"
-version = "1.0.0"
+version = "1.1.0b1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "gitlab-pages-upload" },
     { name = "twine" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/ac/5eef6b777b361d32e4a12a40571d30c0bdc6cbf156b787334ee2141e0a84/cal_publish_python-1.0.0-py3-none-any.whl", hash = "sha256:641992c4a144322992e6379861cd125bbc13ea71ce936b512dab5cbdc81aa1f4", size = 31156, upload-time = "2026-03-12T10:26:18.85Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/5b/588aa22bc0018859e0f9b41baecd5b3eec189196b9ed12cc35639e215a35/cal_publish_python-1.1.0b1-py3-none-any.whl", hash = "sha256:97e066062be51b5be5ed3849ac7f30a22cbf2f5b89f24a86c0b72aa3c3a685b5", size = 31350, upload-time = "2026-03-29T00:08:44.619Z" },
 ]
 
 [[package]]
@@ -926,7 +926,7 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "cal-mkdocs" },
-    { name = "cal-publish-python", specifier = ">=0.4.0" },
+    { name = "cal-publish-python", specifier = ">=1.1.0b1" },
     { name = "pyright", extras = ["nodejs"] },
     { name = "ruff" },
 ]

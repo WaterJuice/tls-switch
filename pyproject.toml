@@ -76,5 +76,5 @@ dev = [
     "ruff",
     "pyright[nodejs]",
     "cal-mkdocs",
-    "cal-publish-python>=0.4.0",
+    "cal-publish-python>=1.1.0b1",
 ]
