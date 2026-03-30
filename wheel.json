@@ -9,8 +9,8 @@
     ],
     "binaries": {
         "macos_arm64": "dist/tls-switch-darwin-arm64",
-        "macos_x86_64": "dist/tls-switch-darwin-amd64",
-        "linux_x86_64": "dist/tls-switch-linux-amd64",
+        "macos_amd64": "dist/tls-switch-darwin-amd64",
+        "linux_amd64": "dist/tls-switch-linux-amd64",
         "linux_arm64": "dist/tls-switch-linux-arm64",
         "windows_amd64": "dist/tls-switch-windows-amd64.exe",
         "windows_arm64": "dist/tls-switch-windows-arm64.exe"
