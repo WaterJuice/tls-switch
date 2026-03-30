@@ -4,6 +4,7 @@
     "author": "WaterJuice",
     "license": "Unlicense",
     "homepage": "https://github.com/WaterJuice/tls-switch",
+    "readme": "ReadMe.md",
     "classifiers": [
         "Programming Language :: Go"
     ],
