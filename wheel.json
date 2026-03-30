@@ -1,6 +1,5 @@
 {
     "name": "tls-switch",
-    "version": "0.0.0-replaced-at-build-time",
     "description": "SNI-based TLS reverse proxy with termination and passthrough modes",
     "author": "WaterJuice",
     "license": "Unlicense",
