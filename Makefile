@@ -76,8 +76,15 @@ check:
 format:
 	gofmt -w *.go internal/*.go
 
-# Dev setup
+# Dev setup: build for current platform + symlink into venv
 .PHONY: dev
-dev:
+dev: go-build
 	uv --version 2>/dev/null && true || pip3 install uv
 	uv sync
+	@ln -sf $$(pwd)/dist/tls-switch-$$(go env GOOS)-$$(go env GOARCH) .venv/bin/tls-switch
+	@echo "tls-switch linked into .venv/bin/"
+
+# Run with arguments (e.g. make run ARGS="-c local/config.json")
+.PHONY: run
+run: go-build
+	@dist/tls-switch-$$(go env GOOS)-$$(go env GOARCH) $(ARGS)
