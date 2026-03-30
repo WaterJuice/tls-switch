@@ -36,7 +36,9 @@ build: check go-build docs
 	rm -rf output/
 	uv --version 2>/dev/null && true || pip3 install uv
 	uv sync
-	uv run bin2whl -c wheel.json
+	sed 's/"version": *"[^"]*"/"version": "$(VERSION_STR)"/' wheel.json > wheel-build.json
+	uv run bin2whl -c wheel-build.json
+	rm -f wheel-build.json
 	cd html && python3 -m zipfile -c ../output/tls-switch-$(VERSION_STR)-docs.zip .
 
 # Publish (requires output/ from make build)
