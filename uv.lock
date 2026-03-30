@@ -26,6 +26,14 @@ wheels = [
 ]
 
 [[package]]
+name = "bin2whl"
+version = "1.0.0b1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/96/2c/90a2a433d4b3641b7fcdb6bb38d7b9e6a2ffd077553c2e8ef4048223971f/bin2whl-1.0.0b1-py3-none-any.whl", hash = "sha256:b9efe25229ab43915efea23d88ed5f3acc17345e516bd8f7dd3361ce2f953bdd", size = 14764, upload-time = "2026-03-30T03:02:07.82Z" },
+]
+
+[[package]]
 name = "cal-mkdocs"
 version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -844,10 +852,11 @@ wheels = [
 [[package]]
 name = "tls-switch"
 version = "0.0.0"
-source = { editable = "." }
+source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
+    { name = "bin2whl" },
     { name = "cal-mkdocs" },
     { name = "cal-publish-python" },
 ]
@@ -856,6 +865,7 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "bin2whl" },
     { name = "cal-mkdocs" },
     { name = "cal-publish-python", specifier = ">=1.1.0b1" },
 ]

@@ -1,57 +1,13 @@
-[tool.hatch.build]
-# Include pre-built Go binaries in builds even though they're gitignored
-artifacts = ["tls_switch/bin/tls-switch-*"]
-
-[tool.hatch.build.targets.wheel]
-packages = ["tls_switch"]
-exclude = ["tls_switch/bin/.gitkeep"]
-
 [project]
 name = "tls-switch"
 requires-python = ">=3.12"
-dynamic = ["version"]
-license = "Unlicense"
-authors = [
-    { name = "WaterJuice" },
-]
-description = "SNI-based TLS reverse proxy with termination and passthrough modes"
-readme = "ReadMe.md"
-keywords = ["tls", "sni", "proxy", "reverse-proxy", "passthrough", "termination"]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Environment :: Console",
-    "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: The Unlicense (Unlicense)",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-]
-dependencies = [
-]
-
-[project.urls]
-Source = "https://github.com/WaterJuice/tls-switch"
-
-[project.scripts]
-tls-switch = "tls_switch.__main__:main"
-
-[build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
-build-backend = "hatchling.build"
-
-[tool.hatch.version]
-source = "uv-dynamic-versioning"
-
-[tool.uv-dynamic-versioning]
-vcs = "git"
-pattern = "default-unprefixed"
+version = "0.0.0"
 
 [tool.uv]
 
-[tool.cal-publish-python]
-profile = "waterjuice"
-
 [dependency-groups]
 dev = [
+    "bin2whl",
     "cal-mkdocs",
     "cal-publish-python>=1.1.0b1",
 ]

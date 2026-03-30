@@ -1,50 +1,24 @@
+# Build output
+/dist/
+/output/
+/html/
+
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-dist/
-eggs/
-.eggs/
 *.egg-info/
-*.egg
-
-# Virtual environments
 .venv/
-venv/
-ENV/
+
+# Go build output (go build produces binary at root)
+/tls-switch
 
 # IDE
 .idea/
 .vscode/
 *.swp
-*.swo
 *~
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Type checking
-.pyright/
-.mypy_cache/
-
-# Linting
-.ruff_cache/
-
-# Build output
-/output
-/html
-
-# Generated
-tls_switch/bin/tls-switch-*
-go/tls-switch
-
 # Local test data
-/local
+/local/
 
 # macOS
 .DS_Store
