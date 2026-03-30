@@ -3,6 +3,9 @@ name = "tls-switch"
 requires-python = ">=3.12"
 version = "0.0.0"
 
+[tool.cal-publish-python]
+profile = "waterjuice"
+
 [tool.uv]
 
 [dependency-groups]
