@@ -27,10 +27,10 @@ wheels = [
 
 [[package]]
 name = "bin2whl"
-version = "1.0.0b2"
+version = "1.0.0b3"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9f/b9/13a49e6772e223d30cb3d6d23883965012760381bfe136f2d2515ffabb66/bin2whl-1.0.0b2-py3-none-any.whl", hash = "sha256:177e8505bd7a722bffc1d874b7f3ab6d2b0e6498b5ce6d3622aeaca17be583c3", size = 15510, upload-time = "2026-03-30T04:14:14.12Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/58/b3a7af01d8b8aa10777ebb978fb8f208c0cad4ca39f2454f103e0f13487a/bin2whl-1.0.0b3-py3-none-any.whl", hash = "sha256:e9bf302854d5a4a160179ba825a0c2163aa98f88d6d7c69ceb84f49829a52e4a", size = 15716, upload-time = "2026-03-30T05:02:08.69Z" },
 ]
 
 [[package]]
@@ -865,7 +865,7 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "bin2whl", specifier = ">=1.0.0b2" },
+    { name = "bin2whl", specifier = ">=1.0.0b3" },
     { name = "cal-mkdocs" },
     { name = "cal-publish-python", specifier = ">=1.1.0b1" },
 ]

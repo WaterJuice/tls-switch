@@ -10,7 +10,7 @@ profile = "waterjuice"
 
 [dependency-groups]
 dev = [
-    "bin2whl>=1.0.0b2",
+    "bin2whl>=1.0.0b3",
     "cal-mkdocs",
     "cal-publish-python>=1.1.0b1",
 ]
