@@ -12,7 +12,7 @@
 //	Mar 2026 - Created
 //
 // ---------------------------------------------------------------------------------------
-package main
+package internal
 
 // ---------------------------------------------------------------------------------------
 //
@@ -23,12 +23,15 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 )
+
+var ErrNotConfigured = errors.New("server is not configured")
 
 // ---------------------------------------------------------------------------------------
 //

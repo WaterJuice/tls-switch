@@ -68,13 +68,13 @@ clean:
 # Check format and lint Go source
 .PHONY: check
 check:
-	gofmt -l *.go | grep . && echo "Go files need formatting (run make format)" && exit 1 || true
+	gofmt -l *.go internal/*.go | grep . && echo "Go files need formatting (run make format)" && exit 1 || true
 	go vet ./...
 
 # Format Go source
 .PHONY: format
 format:
-	gofmt -w *.go
+	gofmt -w *.go internal/*.go
 
 # Dev setup
 .PHONY: dev
