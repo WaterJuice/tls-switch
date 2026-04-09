@@ -86,8 +86,7 @@ func Run(version string) {
 	case "--help", "-h":
 		printUsage()
 	case "--version":
-		fmt.Printf("tls-switch: %s\n", version)
-		fmt.Printf("go: %s\n", strings.TrimPrefix(runtime.Version(), "go"))
+		fmt.Printf("tls-switch %s\n", version)
 	case "--license":
 		fmt.Print(licenceText)
 	case "--example-config":
