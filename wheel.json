@@ -3,7 +3,7 @@
     "description": "SNI-based TLS reverse proxy with termination and passthrough modes",
     "author": "WaterJuice",
     "license": "Unlicense",
-    "homepage": "https://github.com/WaterJuice/tls-switch",
+    "homepage": "https://docs.waterjuice.org/tls-switch",
     "readme": "ReadMe.md",
     "classifiers": [
         "Programming Language :: Go"

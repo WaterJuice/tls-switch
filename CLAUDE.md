@@ -7,47 +7,34 @@ tls-switch is a WaterJuice project. It is an SNI-based TLS reverse proxy that ro
 - **terminate** — complete the TLS handshake with configured cert/key, forward plaintext to backend
 - **passthrough** — forward the raw TLS stream (including ClientHello) to the backend, which handles TLS itself
 
-The core networking engine is written in Go. Python handles CLI, config parsing, certificate validation, file watching, and error reporting.
+Optionally, per host, a [PROXY protocol](https://www.haproxy.org/download/3.0/doc/proxy-protocol.txt) v1 or v2 header can be emitted to the backend so it sees the original client IP.
+
+It is a single statically-linked Go binary; there is no Python at runtime. Python is only used as a packaging mechanism (the binary is distributed as platform-specific wheels via PyPI).
 
 ### Design Principles
 
 - **Never interrupt existing connections** — hot reload applies only to new connections
 - **Zero buffering** — data is forwarded immediately with no processing, filtering, or modification
 - **Robust** — designed to stay up forever, efficient in CPU and memory
-- **All user output from Python** — Go engine never prints to console, communicates only via JSON Lines
+- **Zero runtime dependencies** — single Go binary, no shared libraries (CGO disabled)
 
 ## Architecture
 
-- **Go engine** (`go/`) — TCP listener, SNI extraction from ClientHello, TLS termination via `crypto/tls`, bidirectional `io.Copy` forwarding. Runs as a persistent subprocess.
-- **Python package** (`tls_switch/`) — CLI via argbuilder, config file parsing/validation, cert/key validation, file watching for hot reload, all user-facing output.
-- Pre-built Go binaries live in `tls_switch/bin/` (gitignored, included in wheel via hatch artifacts)
-- **Platform-specific wheels** — `scripts/build_wheels.py` splits a fat wheel into per-platform wheels
+Everything lives in one Go module. The `main` package at the repo root is a thin entry point; all logic is in `internal/`.
 
-### Go File Structure
+### File Structure
 
-- `go/main.go` — JSON Lines protocol loop, command dispatch
-- `go/server.go` — TCP listener, connection accept loop
-- `go/sni.go` — ClientHello parsing, SNI extraction
-- `go/config.go` — config types, atomic swap for hot reload
-- `go/proxy.go` — bidirectional copy, passthrough and terminate modes
+- `main.go` — entry point, calls `internal.Run(Version)`
+- `internal/cli.go` — CLI argument parsing, signal handling, logging, config file watching, user-facing output
+- `internal/config.go` — JSON config parsing, cert/key validation, atomic config swap for hot reload
+- `internal/server.go` — TCP listener, accept loop, connection dispatch, unknown-host rejection
+- `internal/sni.go` — TLS ClientHello parsing, SNI extraction, peeked-bytes connection wrapper
+- `internal/proxy.go` — bidirectional `io.Copy` forwarding for both passthrough and terminate modes
+- `internal/proxyproto.go` — PROXY protocol v1 (text) and v2 (binary) header emission
 
-### Protocol Commands
+### Hot Reload
 
-- `configure` — send validated config (host routes, PEM cert/key data, listen address)
-- `start` — begin accepting connections
-- `stop` — graceful shutdown (drain existing connections)
-- `status` — return listener state, connection count
-- `reload` — atomic config swap for new connections
-
-### Python-Go Communication Protocol
-
-JSON Lines over stdin/stdout. Python sends one JSON object per line, Go responds with one JSON object per line.
-
-Request: `{"command": "configure", "args": {...}}`
-Response (success): `{"status": "ok", "data": {...}}`
-Response (error): `{"status": "error", "error": "message"}`
-
-Go command handlers are registered in the `commands` map. The `Engine` class in Python manages the subprocess lifecycle and provides `engine.send(command, args)` which returns the `data` field or raises `EngineError`.
+`internal/cli.go` polls the config file (and any referenced cert/key files) for mtime changes every 2 seconds. On change, `LoadConfig` is called; on success, the new `*Config` is swapped atomically into `ConfigStore` (an `atomic.Pointer`). Existing connections continue to use the old route they captured at accept time; new connections see the new config.
 
 ### Supported Platforms
 
@@ -62,44 +49,44 @@ Go command handlers are registered in the `commands` map. The `Engine` class in 
 
 ## Build System
 
-- `make dev` — set up Python dev environment (.venv)
-- `make go-build` — cross-compile Go binaries for all 6 platforms (static, CGO_ENABLED=0)
-- `make build` — full build (lint, go-build, version, docs, platform wheels)
-- `make check` — format check (ruff + gofmt) + pyright + go vet
-- `make format` — auto-format Python with ruff, Go with gofmt
-- `make clean` — remove build artefacts and compiled binaries
+- `make dev` — build the binary for the current platform and symlink it into `.venv/bin/tls-switch`
+- `make go-build` — cross-compile binaries for all 6 platforms in parallel (static, `CGO_ENABLED=0 -ldflags='-s -w'`)
+- `make build` — full build: `check`, `go-build`, `docs`, then `bin2whl` to produce platform wheels in `output/`
+- `make check` — `gofmt -l` + `go vet ./...`
+- `make format` — `gofmt -w`
+- `make clean` — remove `html/`, `output/`, `dist/`, `.venv/`
+- `make run ARGS="-c local/config.json"` — build for the current platform and run
 
-Go binaries are statically linked (`CGO_ENABLED=0 -ldflags='-s -w'`).
+The wheel pipeline is driven by `wheel.json` (consumed by `bin2whl`) — that file holds the published metadata (description, homepage, classifiers, readme, binary mappings). `pyproject.toml` is for dev tooling only.
 
 ## Code Style
 
-- Use ASCII dashes (`-`) for separator lines, not unicode box-drawing characters
-- Python separator lines: `# ` followed by 88 dashes (90 chars total)
-- Go separator lines: `// ` followed by 87 dashes (90 chars total)
-- All source files have a header block with: filename, description, copyright, version history
-- Python: ruff formatting + pyright strict type checking
-- Go: gofmt formatting + go vet
-- Zero runtime dependencies — Python stdlib only
+- Use ASCII dashes (`-`) for separator lines, not Unicode box-drawing characters
+- Go separator lines: `// ` followed by 87 dashes (90 chars total) between sections and before each function
+- All Go source files start with a header block: filename, description, copyright, version history
+- gofmt formatting + `go vet` must pass
+- Don't add error handling for impossible scenarios — trust standard library guarantees
+- Default to no comments; only add a comment when the *why* is non-obvious
 
 ## Key Files
 
 - `Makefile` — build orchestration
-- `pyproject.toml` — Python package config (hatch + uv-dynamic-versioning)
-- `go/main.go` — Go entry point, protocol loop
-- `go/go.mod` — Go module definition
-- `tls_switch/cli.py` — Python CLI, argument parsing, logging, file watching, user-facing output
-- `tls_switch/config.py` — JSON config parsing, cert/key validation
-- `tls_switch/engine.py` — manages Go subprocess, JSON Lines protocol, platform detection
-- `tls_switch/argbuilder.py` — argument parsing library (shared across WaterJuice projects)
-- `tls_switch/version.py` — version handling (imports from generated `_version.py`)
-- `scripts/build_wheels.py` — splits fat wheel into per-platform wheels
+- `wheel.json` — published wheel metadata (consumed by `bin2whl`)
+- `pyproject.toml` — dev tooling config (uv, dependency groups)
+- `main.go` — entry point
+- `go.mod` — Go module definition
+- `internal/cli.go`, `internal/config.go`, `internal/server.go`, `internal/sni.go`, `internal/proxy.go`, `internal/proxyproto.go` — implementation
+- `internal/*_test.go` — unit tests
 
 ## Testing
 
 ```bash
-make go-build                          # must build Go binaries first
-uv run tls-switch --version            # check versions (python + go)
-uv run tls-switch --example-config     # print example config
-uv run tls-switch -c local/config.json # run with a config file
-make check                             # format check + lint
+go test ./...                 # run unit tests
+make check                    # gofmt + go vet
+make go-build                 # cross-compile all platforms
+make run ARGS="--version"     # build + run for current platform
+make run ARGS="--example-config"
+make run ARGS="-c local/config.json"
 ```
+
+For PROXY protocol manual end-to-end checks: point a host's backend at `nc -l 9999 | xxd` (or `socat -x TCP-LISTEN:9999,fork -` for passthrough) and inspect the bytes — v1 starts with ASCII `PROXY `, v2 starts with the 12-byte signature `0d0a 0d0a 000d 0a51 5549 540a`.

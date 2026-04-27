@@ -11,11 +11,12 @@ tls-switch sits in front of your services on port 443 and inspects the TLS Clien
 - **TLS passthrough** — forward the raw TLS stream to a backend that handles its own TLS
 - **Hot reload** — config and certificate changes take effect without interrupting existing connections
 - **Zero buffering** — data is forwarded immediately with no processing or modification
-- **Efficient** — Go networking engine with zero-copy forwarding
+- **PROXY protocol** — optional v1 or v2 header emission per host so backends see the original client IP
+- **Efficient** — zero-copy forwarding via `io.Copy`, no goroutine bloat, no allocations on the hot path
 
 ## Requirements
 
-- Python 3.12+
+- Python 3.12+ (only required to install from PyPI; the binary itself has no runtime dependencies)
 - Root/administrator privileges (if binding to port 443)
 
 ## Quick Start
@@ -48,7 +49,8 @@ Create a config file (`config.json`):
     },
     "legacy.example.com": {
       "mode": "passthrough",
-      "backend": "10.0.0.5:443"
+      "backend": "10.0.0.5:443",
+      "proxy_protocol": "v2"
     }
   }
 }
@@ -74,4 +76,4 @@ See the [Usage](usage.md) page for full details on configuration and operation.
 
 ## Architecture
 
-tls-switch is a Python+Go hybrid. Go handles all networking (TCP listener, TLS, SNI extraction, data forwarding). Python handles the CLI, config parsing, certificate validation, file watching, and error reporting. They communicate via JSON Lines over stdin/stdout.
+tls-switch is a single statically-linked Go binary with no runtime dependencies. It includes the TCP listener, TLS handshake, SNI extraction, bidirectional forwarding, optional PROXY protocol header emission, config and certificate file watching, and the CLI — all in one process. It is distributed as platform-specific Python wheels for ease of installation via `pip` or `uvx`, but no Python is required at runtime.

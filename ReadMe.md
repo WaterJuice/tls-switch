@@ -11,8 +11,8 @@ tls-switch sits in front of your services on port 443 and inspects the TLS Clien
 - **TLS passthrough** — forward the raw TLS stream to a backend that handles its own TLS
 - **Hot reload** — config and certificate changes take effect on new connections without interrupting existing ones
 - **Zero buffering** — data is forwarded immediately with no processing, filtering, or modification
-- **Efficient** — Go networking engine with zero-copy forwarding, Python CLI for configuration and management
-- **Zero runtime dependencies** — Python 3.12+ stdlib only, Go binary is statically linked
+- **PROXY protocol** — optional v1/v2 header emission per host so backends can see the original client IP
+- **Zero runtime dependencies** — single statically-linked Go binary, no Python or libc required at runtime
 
 ## Use Cases
 
@@ -23,7 +23,7 @@ tls-switch sits in front of your services on port 443 and inspects the TLS Clien
 
 ## Requirements
 
-- Python 3.12+
+- Python 3.12+ (only required to install from PyPI; the binary itself has no runtime dependencies)
 - Root/administrator privileges (if binding to port 443)
 
 ## Installation
@@ -54,7 +54,8 @@ Create a config file (`config.json`):
     },
     "legacy.example.com": {
       "mode": "passthrough",
-      "backend": "10.0.0.5:443"
+      "backend": "10.0.0.5:443",
+      "proxy_protocol": "v2"
     }
   }
 }
@@ -94,7 +95,8 @@ The config file is JSON with the following structure:
       "mode": "terminate|passthrough",
       "cert": "/path/to/cert.pem",
       "key": "/path/to/key.pem",
-      "backend": "host:port"
+      "backend": "host:port",
+      "proxy_protocol": "v1|v2"
     }
   }
 }
@@ -108,6 +110,7 @@ The config file is JSON with the following structure:
 | `cert` | Path to PEM certificate file (terminate mode only) |
 | `key` | Path to PEM private key file (terminate mode only) |
 | `backend` | Backend address as `host:port` |
+| `proxy_protocol` | Optional. `v1` (text) or `v2` (binary) to emit a [PROXY protocol](https://www.haproxy.org/download/3.0/doc/proxy-protocol.txt) header to the backend so it sees the original client IP. Works in both modes. The backend must be configured to expect it, and **only** to trust PROXY headers from the tls-switch listener address — otherwise clients can spoof their source IP. Omit to disable (default). |
 
 ### Hot Reload
 
@@ -127,7 +130,7 @@ make dev
 # Cross-compile Go binaries
 make go-build
 
-# Run linting and type checking
+# Run format check and lint
 make check
 
 # Auto-format code
@@ -139,10 +142,17 @@ make build
 
 ## Architecture
 
-tls-switch is a Python+Go hybrid:
+tls-switch is a single statically-linked Go binary with no runtime dependencies. It bundles:
 
-- **Go** handles all networking — TCP listener, TLS handshakes, SNI extraction, and bidirectional data forwarding. It runs as a persistent subprocess communicating with Python via JSON Lines over stdin/stdout.
-- **Python** handles everything user-facing — CLI, config file parsing and validation, certificate validation, file watching, and error reporting.
+- TCP listener and accept loop
+- TLS ClientHello parsing and SNI extraction
+- TLS termination via the Go `crypto/tls` standard library
+- Raw passthrough using `io.Copy` for zero-copy forwarding where supported by the OS
+- Optional PROXY protocol v1/v2 header emission to the backend
+- Config + certificate file watching for hot reload
+- Coloured terminal logging
+
+The binary is built with `CGO_ENABLED=0` and works across macOS, Linux, and Windows on amd64 + arm64. It is distributed as platform-specific Python wheels for ease of installation via `pip` / `uvx`, but no Python is required to run it.
 
 ## Licence
 

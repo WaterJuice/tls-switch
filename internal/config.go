@@ -44,6 +44,12 @@ const (
 	ModePassthrough = "passthrough"
 )
 
+const (
+	ProxyProtocolOff = ""
+	ProxyProtocolV1  = "v1"
+	ProxyProtocolV2  = "v2"
+)
+
 // ---------------------------------------------------------------------------------------
 //
 //	Types
@@ -52,9 +58,10 @@ const (
 
 // HostRoute defines the routing configuration for a single hostname.
 type HostRoute struct {
-	Mode      string
-	Backend   string
-	TLSConfig *tls.Config
+	Mode          string
+	Backend       string
+	TLSConfig     *tls.Config
+	ProxyProtocol string
 }
 
 // Config holds the complete server configuration.
@@ -119,10 +126,11 @@ type configFile struct {
 }
 
 type configHost struct {
-	Mode    string `json:"mode"`
-	Backend string `json:"backend"`
-	Cert    string `json:"cert,omitempty"`
-	Key     string `json:"key,omitempty"`
+	Mode          string `json:"mode"`
+	Backend       string `json:"backend"`
+	Cert          string `json:"cert,omitempty"`
+	Key           string `json:"key,omitempty"`
+	ProxyProtocol string `json:"proxy_protocol,omitempty"`
 }
 
 // ---------------------------------------------------------------------------------------
@@ -163,9 +171,16 @@ func LoadConfig(path string) (*Config, error) {
 			return nil, fmt.Errorf("host '%s': backend must be in host:port format", hostname)
 		}
 
+		switch h.ProxyProtocol {
+		case ProxyProtocolOff, ProxyProtocolV1, ProxyProtocolV2:
+		default:
+			return nil, fmt.Errorf("host '%s': proxy_protocol must be 'v1', 'v2', or omitted (got %q)", hostname, h.ProxyProtocol)
+		}
+
 		route := &HostRoute{
-			Mode:    h.Mode,
-			Backend: h.Backend,
+			Mode:          h.Mode,
+			Backend:       h.Backend,
+			ProxyProtocol: h.ProxyProtocol,
 		}
 
 		if h.Mode == ModeTerminate {

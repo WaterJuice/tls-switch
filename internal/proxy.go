@@ -55,6 +55,10 @@ func HandlePassthrough(clientConn net.Conn, buffered []byte, route *HostRoute) {
 	}
 	defer backendConn.Close()
 
+	if err := writeProxyHeader(backendConn, route, clientConn); err != nil {
+		return
+	}
+
 	if _, err := backendConn.Write(buffered); err != nil {
 		return
 	}
@@ -86,6 +90,10 @@ func HandleTerminate(clientConn net.Conn, buffered []byte, route *HostRoute) {
 	}
 	defer backendConn.Close()
 	defer tlsConn.Close()
+
+	if err := writeProxyHeader(backendConn, route, clientConn); err != nil {
+		return
+	}
 
 	bidirectionalCopy(tlsConn, backendConn)
 }

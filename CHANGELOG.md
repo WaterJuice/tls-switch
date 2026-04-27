@@ -1,3 +1,9 @@
+# tls-switch 1.1.0 Beta 1 - 27 Apr 2026
+
+## Features
+
+- **PROXY protocol** — new optional per-host `proxy_protocol` field emits a [PROXY protocol](https://www.haproxy.org/download/3.0/doc/proxy-protocol.txt) header to the backend so it sees the original client IP. Set to `"v1"` for the human-readable text format or `"v2"` for the compact binary format. Works in both terminate and passthrough modes; default off. The backend must be configured to expect it.
+
 # tls-switch 1.0.0 - 9 Apr 2026
 
 Initial release.

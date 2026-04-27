@@ -42,7 +42,8 @@ The config file is JSON:
     },
     "legacy.example.com": {
       "mode": "passthrough",
-      "backend": "10.0.0.5:443"
+      "backend": "10.0.0.5:443",
+      "proxy_protocol": "v2"
     }
   }
 }
@@ -63,6 +64,7 @@ Each host entry:
 | `backend` | Yes | Backend address as `host:port` |
 | `cert` | terminate only | Path to PEM certificate file (may include full chain) |
 | `key` | terminate only | Path to PEM private key file |
+| `proxy_protocol` | No | `v1` or `v2` to emit a PROXY protocol header to the backend (see [PROXY Protocol](#proxy-protocol) below). Omit to disable (default). |
 
 Certificate and key paths may be absolute or relative to the config file's directory.
 
@@ -100,6 +102,41 @@ Use this when the backend has its own TLS certificate and you just need port 443
 
 No `cert` or `key` fields are needed for passthrough mode.
 
+### PROXY Protocol
+
+Set the optional `proxy_protocol` field on a host to emit a [PROXY protocol](https://www.haproxy.org/download/3.0/doc/proxy-protocol.txt) header to the backend so it sees the original client IP and port instead of the address of tls-switch. The header is written to the backend connection before any other bytes flow, and works the same way in both `terminate` and `passthrough` modes.
+
+```json
+{
+  "mode": "passthrough",
+  "backend": "10.0.0.5:443",
+  "proxy_protocol": "v2"
+}
+```
+
+Two formats are supported:
+
+- **`v1`** — human-readable text format. A single ASCII line like `PROXY TCP4 1.2.3.4 5.6.7.8 12345 443\r\n`. Easy to debug with `tcpdump` or `nc`. Maximum ~100 bytes per connection.
+- **`v2`** — compact binary format. A 28-byte (IPv4) or 52-byte (IPv6) header. Faster to parse, supports more transport types, and is the default for most modern proxies.
+
+Use whichever format your backend expects. If you have a choice, prefer `v2`.
+
+#### Backend support
+
+The backend **must** be configured to expect a PROXY protocol header on the listener tls-switch connects to — if it isn't, the bytes will be misinterpreted as the start of a TLS handshake or HTTP request, and the connection will fail. Common configurations:
+
+- **nginx** — `listen 443 ssl proxy_protocol;` plus `set_real_ip_from <tls-switch-IP>;`
+- **Apache** — `RemoteIPProxyProtocol On` with `RemoteIPProxyProtocolExceptions` if needed
+- **HAProxy** — `accept-proxy` on the bind line
+- **Caddy** — the `proxy_protocol` directive on the listener
+- **Traefik** — `proxyProtocol.trustedIPs` set to the tls-switch address
+
+#### Security: trust boundary
+
+PROXY protocol headers carry the source IP that tls-switch saw on the incoming connection. **The backend must trust PROXY headers _only_ from the tls-switch listener address.** If the backend accepts PROXY headers from arbitrary sources, any client can spoof their source IP simply by prepending their own header to the connection. Most backends provide a "trusted proxies" or "set real IP from" setting for exactly this reason — make sure it points only to the tls-switch host.
+
+If the field is omitted (or set to anything other than `v1` / `v2`, which is rejected at config load), no header is sent and the backend sees only the tls-switch source address.
+
 ### Unknown Hostnames
 
 If a client requests a hostname not in the configuration, tls-switch completes a TLS handshake using any available configured certificate and returns an HTTP 421 Misdirected Request error page. This gives browsers a clear error message rather than a cryptic "can't connect".
@@ -129,7 +166,7 @@ tls-switch logs each connection to stderr with timestamps, source IP, hostname, 
 Example output:
 
 ```
-2026-03-28 16:05:52 +1100 tls-switch 1.0.0b1 (python 3.14.3, go 1.26.0)
+2026-03-28 16:05:52 +1100 tls-switch 1.0.0b1 (go 1.26.0)
 2026-03-28 16:05:52 +1100 Configured 2 host(s):
 2026-03-28 16:05:52 +1100   app.example.com (terminate) → 127.0.0.1:8080
 2026-03-28 16:05:52 +1100   legacy.example.com (passthrough) → 10.0.0.5:443
@@ -143,6 +180,6 @@ Example output:
 
 - `--config FILE`, `-c FILE` — path to the JSON config file (required)
 - `--example-config` — print an example config file and exit
-- `--version` — show tls-switch, Python, and Go versions
+- `--version` — show the tls-switch version
 - `--license` — show license information and exit
 - `--help` — show help

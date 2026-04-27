@@ -48,7 +48,8 @@ const exampleConfig = `{
     },
     "legacy.example.com": {
       "mode": "passthrough",
-      "backend": "10.0.0.5:443"
+      "backend": "10.0.0.5:443",
+      "proxy_protocol": "v2"
     }
   }
 }
