@@ -1,4 +1,4 @@
-# tls-switch 1.1.0 Beta 1 - 27 Apr 2026
+# tls-switch 1.1.0 - 27 Apr 2026
 
 ## Features
 
