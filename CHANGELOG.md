@@ -1,3 +1,7 @@
+# tls-switch 1.1.1 - 30 May 2026
+
+Moved to new GitHub location: https://github.com/WaterJuice/tls-switch
+
 # tls-switch 1.1.0 - 27 Apr 2026
 
 ## Features
